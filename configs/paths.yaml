@@ -2,19 +2,21 @@
 # The active profile is chosen automatically (Kaggle if /kaggle/input exists, else local)
 # and can be forced with the env var SDD_PROFILE=kaggle|local.
 #
-# raw.<ds> may be one path or a list of candidates: the first existing one is used, so an attached Kaggle dataset
-# wins and the copy downloaded by scripts/download_data.py (under raw_root) is the fallback.
+# raw.<ds> may be one path or a list of candidates (globs allowed): the first existing one is used, so an attached
+# Kaggle dataset wins and the copy downloaded by scripts/download_data.py (the last entry, under raw_root) is the fallback.
 # A single dataset can also be forced with SDD_RAW_<DATASET>=<path> (e.g. SDD_RAW_NEU=/kaggle/input/foo).
 # Raw roots only need to point at the top folder of a dataset: readers search recursively.
 
 kaggle:
   raw_root: /kaggle/working/raw       # scripts/download_data.py target
+  # Globs (**) find a dataset under any mount layout (/kaggle/input/<slug>/..., /kaggle/input/datasets/<owner>/<slug>/...),
+  # e.g. the one-time "sdd-raw" bundle made with scripts/download_data.py --bundle, or an attached original mirror.
   raw:
-    neu: [/kaggle/input/sdd-raw/NEU-DET, /kaggle/input/neu-surface-defect-database, /kaggle/working/raw/NEU-DET]
-    gc10: [/kaggle/input/sdd-raw/GC10-DET, /kaggle/input/gc10det, /kaggle/working/raw/GC10-DET]
-    pcb: [/kaggle/input/sdd-raw/PCB_DATASET, /kaggle/input/pcb-defects, /kaggle/working/raw/PCB_DATASET]
-    mt: [/kaggle/input/sdd-raw/Magnetic-Tile, /kaggle/working/raw/Magnetic-Tile]
-    ksdd2: [/kaggle/input/sdd-raw/KolektorSDD2, /kaggle/working/raw/KolektorSDD2]
+    neu: [/kaggle/input/**/NEU-DET, /kaggle/working/raw/NEU-DET]
+    gc10: [/kaggle/input/**/GC10-DET, /kaggle/input/**/gc10det, /kaggle/working/raw/GC10-DET]
+    pcb: [/kaggle/input/**/PCB_DATASET, /kaggle/working/raw/PCB_DATASET]
+    mt: [/kaggle/input/**/Magnetic-Tile, /kaggle/working/raw/Magnetic-Tile]
+    ksdd2: [/kaggle/input/**/KolektorSDD2, /kaggle/working/raw/KolektorSDD2]
   work: /kaggle/working/work          # processed YOLO/COCO data
   results: /kaggle/working/results    # runs, metrics, tables, figures
   weights: /kaggle/working/weights    # COCO-pretrained checkpoints cache

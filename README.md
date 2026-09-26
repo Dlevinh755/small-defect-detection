@@ -53,9 +53,18 @@ tests/                  CPU tests on synthetic data
 | ksdd2 | KolektorSDD2 | data.vicos.si `KolektorSDD2.zip` (~850 MB) | CC BY-NC-SA 4.0, target set |
 
 Datasets already present (attached input or earlier download) and passing the checks are skipped; `--check` only
-checks; the result table goes to `<raw>/MANIFEST.md`. To avoid re-downloading every session, run once with
-`--copy --bundle <user>/sdd-raw`, upload with `kaggle datasets create -p /kaggle/working/raw --dir-mode zip`, and
-attach it: `/kaggle/input/sdd-raw/...` is the first candidate in `configs/paths.yaml`.
+checks; the result table goes to `<raw>/MANIFEST.md`.
+
+**Download once, reuse as a Kaggle dataset** (recommended):
+1. One-time session: in the notebook set `RAW_BUNDLE = "<kaggle-username>/sdd-raw"`, add Kaggle Secrets
+   `KAGGLE_USERNAME` / `KAGGLE_KEY` (Add-ons -> Secrets; key from kaggle.com -> Settings -> API), keep only
+   `RUN["download"]` on, run. This is `download_data.py --bundle <id> --upload`: everything is downloaded as real
+   files (no symlinks), checked, and uploaded as a PRIVATE dataset (a new version if it already exists) together
+   with `MANIFEST.md`. A failed dataset stops the upload. Without API secrets the bundle is still prepared;
+   after Save Version use Output -> "New Dataset".
+2. Every later session: Add Data -> `sdd-raw`, `RAW_BUNDLE = ""`. `configs/paths.yaml` finds each dataset with
+   globs such as `/kaggle/input/**/NEU-DET`, whatever the mount layout (`/kaggle/input/<slug>/` or
+   `/kaggle/input/datasets/<owner>/<slug>/`), so the download step only re-checks and skips.
 
 ## Quickstart (local)
 

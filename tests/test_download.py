@@ -60,3 +60,32 @@ def test_manifest(tmp_path):
     md = (tmp_path / "MANIFEST.md").read_text(encoding="utf-8")
     assert "| neu | NEU-DET | ok | 1800 |" in md and "expected 6" in md
     assert json.loads((tmp_path / "MANIFEST.json").read_text())[0]["images"] == 1800
+
+
+def test_raw_path_glob_finds_any_mount_layout(tmp_path, monkeypatch):
+    monkeypatch.delenv("SDD_RAW_NEU", raising=False)
+    deep = tmp_path / "input" / "datasets" / "someone" / "sdd-raw" / "NEU-DET"
+    (deep / "NEU-DET").mkdir(parents=True)                  # a nested folder with the same name
+    p = Paths("t", {"neu": [str(tmp_path / "input" / "**" / "NEU-DET"), str(tmp_path / "raw" / "NEU-DET")]},
+              tmp_path / "raw", tmp_path, tmp_path, tmp_path)
+    assert p.raw_dir("neu") == deep                           # shallowest match wins
+
+
+def test_materialize_replaces_symlink(tmp_path, monkeypatch):
+    import sdd.data.download as dl
+
+    real = tmp_path / "cache" / "mirror"
+    (real / "x").mkdir(parents=True)
+    (real / "x" / "a.txt").write_text("1")
+    root = tmp_path / "raw"
+    root.mkdir()
+    link = root / "NEU-DET"
+    try:
+        os.symlink(real, link, target_is_directory=True)
+    except OSError:
+        import pytest
+        pytest.skip("no symlink permission on this machine")
+    fake = Paths("t", {"neu": [str(link)]}, root, tmp_path, tmp_path, tmp_path)
+    monkeypatch.setattr(dl, "paths", lambda: fake)
+    msg = dl.materialize(["neu"])
+    assert not link.is_symlink() and (link / "x" / "a.txt").read_text() == "1" and "replaced" in msg[0]

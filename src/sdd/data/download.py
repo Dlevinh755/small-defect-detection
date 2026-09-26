@@ -210,10 +210,47 @@ def write_manifest(rows: list[dict], root: Path) -> None:
     (root / "MANIFEST.md").write_text("\n".join(lines + ([""] + notes if notes else [])) + "\n", encoding="utf-8")
 
 
+def materialize(datasets: list[str]) -> list[str]:
+    """Make ``<raw_root>/<folder>`` a real directory for every dataset (copying from wherever it was found or
+    linked), so the raw root can be uploaded: Kaggle cannot upload symlinks."""
+    sources, root, done = load_sources(), paths().raw_root, []
+    for ds in datasets:
+        target = root / sources[ds]["folder"]
+        src = paths().raw_dir(ds)
+        if target.is_symlink():
+            real = target.resolve()
+            target.unlink()
+            shutil.copytree(real, target, symlinks=False)
+            done.append(f"{ds}: symlink replaced by a copy of {real}")
+        elif not target.exists() and src.exists():
+            shutil.copytree(src, target, symlinks=False)
+            done.append(f"{ds}: copied from {src}")
+        elif target.exists():
+            links = [p for p in target.rglob("*") if p.is_symlink()]
+            for link in links:  # symlinked files inside (rare) -> real files
+                real = link.resolve()
+                link.unlink()
+                (shutil.copytree if real.is_dir() else shutil.copy2)(real, link)
+            done.append(f"{ds}: ok ({len(links)} inner links resolved)")
+    return done
+
+
 def kaggle_bundle(root: Path, dataset_id: str) -> Path:
-    """dataset-metadata.json so the collected raw folder can be uploaded once as a private Kaggle dataset
-    (``kaggle datasets create -p <root> --dir-mode zip``) and attached in later sessions as /kaggle/input/sdd-raw."""
-    meta = {"title": "SDD raw datasets", "id": dataset_id, "licenses": [{"name": "other"}]}
+    """dataset-metadata.json so the collected raw folder can be uploaded once as a private Kaggle dataset."""
+    meta = {"title": "SDD raw datasets", "id": dataset_id, "licenses": [{"name": "other"}],
+            "subtitle": "NEU-DET, GC10-DET, PKU-Market-PCB, Magnetic Tile, KolektorSDD2 (see MANIFEST.md)"}
     p = root / "dataset-metadata.json"
     p.write_text(json.dumps(meta, indent=2))
     return p
+
+
+def kaggle_upload(root: Path, dataset_id: str, message: str = "raw datasets") -> str:
+    """Create the private dataset, or add a new version if it already exists. Needs Kaggle API credentials
+    (KAGGLE_USERNAME / KAGGLE_KEY env vars - in a notebook load them from Kaggle Secrets - or ~/.kaggle/kaggle.json).
+    Directories are uploaded as zip archives; Kaggle unpacks them, and the readers search recursively anyway."""
+    kaggle_bundle(root, dataset_id)
+    cli = [sys.executable, "-m", "kaggle", "datasets"]
+    exists = subprocess.run(cli + ["status", dataset_id], capture_output=True, text=True).returncode == 0
+    cmd = cli + (["version", "-p", str(root), "-m", message] if exists else ["create", "-p", str(root)]) + ["--dir-mode", "zip"]
+    subprocess.run(cmd, check=True)
+    return ("new version of " if exists else "created private dataset ") + dataset_id

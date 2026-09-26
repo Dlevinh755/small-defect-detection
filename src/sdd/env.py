@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import platform
 import shutil
@@ -34,8 +35,15 @@ class Paths:
         if dataset not in self.raw:
             raise KeyError(f"No raw path for '{dataset}' in configs/paths.yaml ({self.profile} profile)")
         cands = self.raw[dataset] if isinstance(self.raw[dataset], list) else [self.raw[dataset]]
-        cands = [_abs(c) for c in cands]
-        return next((c for c in cands if c.exists()), cands[-1])  # last = download target
+        for c in cands[:-1]:
+            if any(ch in str(c) for ch in "*?["):  # glob, e.g. /kaggle/input/**/NEU-DET (any mount layout)
+                hits = sorted((p for p in map(Path, glob.glob(str(c), recursive=True)) if p.is_dir()),
+                              key=lambda p: (len(p.parts), str(p)))  # shallowest match first
+                if hits:
+                    return hits[0]
+            elif _abs(c).exists():
+                return _abs(c)
+        return _abs(cands[-1])  # last = download target (scripts/download_data.py)
 
     def data_dir(self, dataset: str) -> Path:
         """Processed dataset (YOLO layout + COCO json)."""
