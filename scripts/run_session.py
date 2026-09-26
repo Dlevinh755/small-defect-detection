@@ -2,8 +2,11 @@
 
     python scripts/run_session.py p1 --deadline 1760000000      # unix time at which everything must be stopped
     python scripts/run_session.py p1 --hours 10.5 --smoke
+    python scripts/run_session.py p1 --hours 11 --session-shard 1/2   # this machine does the 2nd half of the grid
 
-One ``run_grid.py`` process per GPU (``--shard g/n``). New runs are not started past the deadline, and runs still
+One ``run_grid.py`` process per GPU. ``--session-shard i/m`` splits a grid between m machines / Kaggle accounts
+(machine i takes every m-th slice): with G GPUs each, GPU g runs shard ``i*G + g`` of ``m*G``. Every machine must
+use the same code version (same grid order) and the same GPU count. New runs are not started past the deadline, and runs still
 going at the deadline are STOPPED (process group SIGTERM, then SIGKILL): Ultralytics / Faster R-CNN keep
 ``last.pt`` from the last finished epoch, so the next session resumes them. Stopping ourselves - instead of being
 killed by Kaggle at 12 h - lets the notebook finish normally, so the report runs and the output is saved.
@@ -54,6 +57,7 @@ def main():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--deadline", type=float, help="unix time: stop everything at this moment")
     g.add_argument("--hours", type=float, help="deadline = now + hours")
+    ap.add_argument("--session-shard", default="0/1", help="i/m: this machine's part when m machines share the grid")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--datasets", nargs="*")
     ap.add_argument("--logs", default=os.environ.get("SDD_LOGS", "/kaggle/working/logs"))
@@ -70,9 +74,11 @@ def main():
     logs = Path(a.logs)
     logs.mkdir(parents=True, exist_ok=True)
     script = Path(__file__).with_name("run_grid.py")
+    si, sm = map(int, a.session_shard.split("/"))
     procs = []
     for i in range(n):
-        cmd = [sys.executable, str(script), a.grid, "--device", str(i) if n_gpu else "cpu", "--shard", f"{i}/{n}",
+        cmd = [sys.executable, str(script), a.grid, "--device", str(i) if n_gpu else "cpu",
+               "--shard", f"{si * n + i}/{sm * n}",
                "--max-hours", f"{left_h:.3f}"]
         if a.smoke:
             cmd += ["--smoke", "--datasets", *(a.datasets or ["neu"])]
