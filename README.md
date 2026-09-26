@@ -84,7 +84,8 @@ python scripts/train.py --dataset neu --model yolo11n --variant p2 --smoke --dev
 2. Import `notebooks/sdd_end_to_end.ipynb`; settings: GPU **T4 x2** (x1 works), Internet **on**; add the raw
    datasets and edit their slugs in `configs/paths.yaml` (or set `SDD_RAW_<DS>`).
 3. In the **Config** cell choose the stages (`RUN = {...}`), optionally `SMOKE = True` for a ~15 min pipeline
-   check first, then **Save Version -> Save & Run All**. Setup runs `scripts/kaggle_setup.sh` (clone/copy,
+   check first, then **Save Version -> Save & Run All**. Setup clones the repo (or reuses an existing clone and
+   pulls), then runs `scripts/kaggle_setup.sh` (
    install, sync previous results); each grid runs one process per GPU (`--shard i/n`), and all stages share one
    session budget (`SESSION_HOURS`), so no new run starts when time is nearly up.
 4. The study needs several sessions: add the previous version's output as an input, set
