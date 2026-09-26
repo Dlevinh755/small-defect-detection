@@ -22,6 +22,7 @@ def is_kaggle() -> bool:
 class Paths:
     profile: str
     raw: dict
+    raw_root: Path
     work: Path
     results: Path
     weights: Path
@@ -32,7 +33,9 @@ class Paths:
             return Path(env)
         if dataset not in self.raw:
             raise KeyError(f"No raw path for '{dataset}' in configs/paths.yaml ({self.profile} profile)")
-        return _abs(self.raw[dataset])
+        cands = self.raw[dataset] if isinstance(self.raw[dataset], list) else [self.raw[dataset]]
+        cands = [_abs(c) for c in cands]
+        return next((c for c in cands if c.exists()), cands[-1])  # last = download target
 
     def data_dir(self, dataset: str) -> Path:
         """Processed dataset (YOLO layout + COCO json)."""
@@ -55,6 +58,7 @@ def paths() -> Paths:
     p = Paths(
         profile=profile,
         raw=c["raw"],
+        raw_root=_abs(os.environ.get("SDD_RAW_ROOT", c.get("raw_root", "data/raw"))),
         work=_abs(os.environ.get("SDD_WORK", c["work"])),
         results=_abs(os.environ.get("SDD_RESULTS", c["results"])),
         weights=_abs(c["weights"]),

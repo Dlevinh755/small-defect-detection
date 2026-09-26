@@ -1,7 +1,12 @@
 # Datasets
 
 Record here, for every dataset actually used: **source URL / Kaggle slug, version, license, download date**
-(plan §2.2). Raw data is never committed; its location is configured in `configs/paths.yaml`.
+(plan §2.2). `scripts/download_data.py` fetches them (sources in `configs/sources.yaml`) and writes this information
+to `<raw>/MANIFEST.md` - paste that table below. Raw data is never committed; paths are in `configs/paths.yaml`.
+
+Known data issues found by the checks:
+- Magnetic Tile: 6 images in `MT_Uneven` have an empty (4) or near-empty (26-45 px) mask -> skipped by the reader
+  (otherwise they would become false "clean" backgrounds); 19 mask components < `min_area` dropped.
 
 | id | Dataset | Source (fill in) | License | Downloaded | Notes |
 |---|---|---|---|---|---|

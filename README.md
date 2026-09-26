@@ -39,12 +39,30 @@ notebooks/              sdd_end_to_end.ipynb: the single Kaggle notebook (data -
 tests/                  CPU tests on synthetic data
 ```
 
+## Data download
+
+`python scripts/download_data.py` fetches and checks all five datasets into one folder (`data/raw` locally,
+`/kaggle/working/raw` on Kaggle); sources, licenses and expected counts are in `configs/sources.yaml`:
+
+| id | dataset | source | notes |
+|---|---|---|---|
+| neu | NEU-DET | Kaggle `kaustubhdikshit/neu-surface-defect-database` | needs ANNOTATIONS/*.xml |
+| gc10 | GC10-DET | Kaggle `alex000kim/gc10det` | only ~2300 of ~3570 images have XML; the rest is skipped |
+| pcb | PKU-Market-PCB | Kaggle `akhatova/pcb-defects` | original high-res boards (not the Roboflow 3x export); board ids recorded |
+| mt | Magnetic Tile | GitHub `abin24/Magnetic-tile-defect-datasets.` (zip) | masks -> boxes; defect images with an empty mask are skipped |
+| ksdd2 | KolektorSDD2 | data.vicos.si `KolektorSDD2.zip` (~850 MB) | CC BY-NC-SA 4.0, target set |
+
+Datasets already present (attached input or earlier download) and passing the checks are skipped; `--check` only
+checks; the result table goes to `<raw>/MANIFEST.md`. To avoid re-downloading every session, run once with
+`--copy --bundle <user>/sdd-raw`, upload with `kaggle datasets create -p /kaggle/working/raw --dir-mode zip`, and
+attach it: `/kaggle/input/sdd-raw/...` is the first candidate in `configs/paths.yaml`.
+
 ## Quickstart (local)
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -e .[dev]      # Linux/Mac: .venv/bin/pip
 pytest -q                                                         # synthetic-data tests, CPU only
-# put raw data under data/raw/... (see configs/paths.yaml), then:
+python scripts/download_data.py --only neu                        # or all; see "Data download"
 python scripts/prepare_data.py --datasets neu
 python scripts/eda.py --datasets neu
 python scripts/train.py --dataset neu --model yolo11n --variant p2 --smoke --device cpu

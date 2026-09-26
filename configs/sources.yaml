@@ -1,0 +1,57 @@
+# Where scripts/download_data.py gets each raw dataset (plan §2.2). Everything lands in one raw root:
+#   <raw_root>/<folder>/...      (local: data/raw, Kaggle: /kaggle/working/raw)
+# kind: kaggle -> kagglehub.dataset_download(slug)   (no API key needed inside a Kaggle notebook;
+#                 locally put kaggle.json in ~/.kaggle or set KAGGLE_USERNAME / KAGGLE_KEY)
+#       url    -> direct zip download + extraction
+# expect: sanity numbers checked after download (warnings, not errors - mirrors differ slightly)
+
+neu:
+  name: NEU-DET
+  folder: NEU-DET
+  kind: kaggle
+  slug: kaustubhdikshit/neu-surface-defect-database
+  source_page: https://www.kaggle.com/datasets/kaustubhdikshit/neu-surface-defect-database
+  fallback: "IEEE DataPort - NEU-DET; must contain ANNOTATIONS/*.xml (classification-only mirrors are useless here)"
+  license: research use (Song & Yan 2013)
+  expect: {images: 1800, classes: 6}
+
+gc10:
+  name: GC10-DET
+  folder: GC10-DET
+  kind: kaggle
+  slug: alex000kim/gc10det
+  source_page: https://www.kaggle.com/datasets/alex000kim/gc10det
+  fallback: "author GitHub (Baidu Pan, code cdyt) / Hugging Face mirror"
+  license: research use (Lv et al. 2020)
+  expect: {images: 2294, classes: 10}   # only ~2300 of ~3570 images have an XML; unlabeled ones are skipped
+
+pcb:
+  name: PKU-Market-PCB
+  folder: PCB_DATASET
+  kind: kaggle
+  slug: akhatova/pcb-defects
+  source_page: https://www.kaggle.com/datasets/akhatova/pcb-defects
+  fallback: "PKU lab page / HyperAI. NOT the Roboflow 3x-augmented 640 px export"
+  license: research use (PKU Open Lab on Human Robot Interaction)
+  expect: {images: 693, classes: 6, min_side: 1000}   # original high-resolution boards
+  board_regex: "^(\\d+)_"                               # stem prefix = source board -> leakage check
+
+mt:
+  name: Magnetic Tile
+  folder: Magnetic-Tile
+  kind: url
+  url: https://github.com/abin24/Magnetic-tile-defect-datasets./archive/refs/heads/master.zip
+  source_page: https://github.com/abin24/Magnetic-tile-defect-datasets.
+  fallback: "git clone the repo, or upload its ZIP as a private Kaggle dataset"
+  license: research use (Huang, Qiu & Yuan 2020)
+  expect: {images: 1344, classes: 5, mt_folders: 6}
+
+ksdd2:
+  name: KolektorSDD2
+  folder: KolektorSDD2
+  kind: url
+  url: https://data.vicos.si/datasets/KSDD/KolektorSDD2.zip   # target of https://go.vicos.si/kolektorsdd2 (~850 MB)
+  source_page: https://www.vicos.si/resources/kolektorsdd2/
+  fallback: "Dataset Ninja mirror"
+  license: CC BY-NC-SA 4.0 (non-commercial only)
+  expect: {images: 3335, classes: 1}

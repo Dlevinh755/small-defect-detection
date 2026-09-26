@@ -184,6 +184,11 @@ def read_magnetic_tile(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]
             else:
                 boxes, dropped = mask_to_boxes(_read_mask(mask_path), cfg.get("mask_thr", 127), cfg.get("min_area", 4))
             rep.dropped_small += dropped
+            if not clean and not len(boxes):
+                # a defect-folder image whose mask has no component >= min_area must not become a "clean" background
+                rep.notes.append(f"skipped {d.name}/{img.name}: no mask component >= min_area")
+                rep.dropped_degenerate += 1
+                continue
             cls = np.full(len(boxes), -1 if clean else lookup[cls_name], int)
             samples.append(Sample(f"{cls_name}_{img.stem}", img, w, h, boxes, cls, {"folder": d.name}))
     rep.n_images, rep.n_boxes = len(samples), sum(len(s.boxes) for s in samples)
