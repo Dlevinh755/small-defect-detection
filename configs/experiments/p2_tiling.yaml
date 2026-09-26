@@ -1,0 +1,12 @@
+# Large-image track (plan §5.1 "tăng imgsz / SAHI"), for datasets whose defects shrink when resized to 640.
+# Every row is scored on the same ORIGINAL full test images as phase 1; compare with p1_<ds>_yolo11n_*_s0.
+#   rows 1-2: sliced inference only, re-using the phase-1 checkpoints (no training, minutes per dataset)
+#   row 3:    train on 640x640 tiles (dataset id <ds>_t640, built automatically) + sliced inference
+# A run entry may override `datasets`.
+phase: p2t
+datasets: [pcb, gc10]
+seeds: [0]
+runs:
+  - {model: yolo11n, variant: base, infer: sliced, reuse_phase: p1}
+  - {model: yolo11n, variant: p2, infer: sliced, reuse_phase: p1}
+  - {model: yolo11n, variant: base, infer: sliced, datasets: [pcb_t640, gc10_t640]}

@@ -1,0 +1,108 @@
+# Small Surface Defect Detection
+
+Experiment code for the research plan in [docs/KE_HOACH_NGHIEN_CUU_LOI_BE_MAT_NHO.md](docs/KE_HOACH_NGHIEN_CUU_LOI_BE_MAT_NHO.md):
+baselines on industrial surface-defect datasets, small-object improvements (P2 head, attention / SPD-Conv
+backbone, NWD / Wise-IoU / Inner-IoU losses) and transfer learning to a small real-world target set.
+Built to run on **Kaggle T4** (single or T4 x2), resumable across 12-hour sessions.
+
+| Phase | What | Grid(s) | `RUN` flag |
+|---|---|---|---|
+| 1 (Thường kỳ) | YOLO11n, Faster R-CNN R50-FPN v2, RT-DETR-l + YOLO11n-P2 on NEU / GC10 / PCB / MT | `p1` | `p1` |
+| 2 (Giữa kỳ) | module screening, then ablation A0-A7 x 3 seeds, Welch t-test | `p2_candidates`, `p2_ablation`, `p2_ablation_rest` | `p2_screen`, `p2_ablation` |
+| 2, large images | SAHI-style sliced inference on P1 checkpoints; training on 640 tiles (PCB, GC10) | `p2_tiling` | `p2_tiling` |
+| 3 (Cuối kỳ) | source models on merged data, then T1/T2/T3 x 10-100% x full/freeze on KolektorSDD2 | `p3_source`, `p3_transfer` | `p3` |
+
+## Layout
+
+```
+configs/
+  paths.yaml            raw dataset roots (Kaggle / local profiles), work & results dirs
+  datasets.yaml         dataset registry: reader, classes, class-name mapping, split ratios, mask settings
+  protocol.yaml         shared protocol: imgsz, epochs/batch per family, seeds, eval thresholds, size bins
+  variants.yaml         model variants (P2, SimAM, CBAM, CA, SPD, NWD, WIoU, Inner-IoU, ablation A0-A7)
+  models/               custom Ultralytics yamls (yolo11n-p2, yolo11n-p2p4)
+  experiments/          run grids per phase
+splits/<ds>/            fixed train/val/test id lists (seed 42) - created once, commit them
+src/sdd/
+  data/                 raw readers -> splits -> YOLO + COCO layout; merge (phase 3), subsample, label drawing
+  eda/                  EDA tables and figures
+  models/               attention / SPD modules, backbone surgery, losses, custom Ultralytics trainer, Faster R-CNN
+  engine/               one run end to end (run.py), prediction export, grid runner
+  evaluation/           COCO AP (abs + relative size), operating-point P/R + recall by size, TIDE,
+                        params/GFLOPs/FPS, image-level metrics, seed statistics
+  reporting/            master_results.csv, tables (csv/md/tex), figures, error gallery
+scripts/                CLIs: prepare_data, eda, train, run_grid, make_report, feature_maps, sync_results,
+                        kaggle_setup.sh
+notebooks/              sdd_end_to_end.ipynb: the single Kaggle notebook (data -> EDA -> P1 -> P2 -> P3 -> report)
+tests/                  CPU tests on synthetic data
+```
+
+## Quickstart (local)
+
+```bash
+python -m venv .venv && .venv/Scripts/pip install -e .[dev]      # Linux/Mac: .venv/bin/pip
+pytest -q                                                         # synthetic-data tests, CPU only
+# put raw data under data/raw/... (see configs/paths.yaml), then:
+python scripts/prepare_data.py --datasets neu
+python scripts/eda.py --datasets neu
+python scripts/train.py --dataset neu --model yolo11n --variant p2 --smoke --device cpu
+```
+
+## On Kaggle
+
+1. Code: https://github.com/Dlevinh755/small-defect-detection (already set as `SDD_REPO` in the notebook; a
+   private repo needs a token in the URL, or upload the repo folder as a Kaggle dataset `sdd-code` instead).
+2. Import `notebooks/sdd_end_to_end.ipynb`; settings: GPU **T4 x2** (x1 works), Internet **on**; add the raw
+   datasets and edit their slugs in `configs/paths.yaml` (or set `SDD_RAW_<DS>`).
+3. In the **Config** cell choose the stages (`RUN = {...}`), optionally `SMOKE = True` for a ~15 min pipeline
+   check first, then **Save Version -> Save & Run All**. Setup runs `scripts/kaggle_setup.sh` (clone/copy,
+   install, sync previous results); each grid runs one process per GPU (`--shard i/n`), and all stages share one
+   session budget (`SESSION_HOURS`), so no new run starts when time is nearly up.
+4. The study needs several sessions: add the previous version's output as an input, set
+   `PREV_RESULTS=/kaggle/input/<that-output>/results` and run again - finished runs (`done.json`) are skipped,
+   unfinished ones resume from `last.pt`. Enable the phase-2/3 flags once the previous phase is done
+   (and after editing A2/A3 in `configs/variants.yaml`).
+
+## Runs and results
+
+Run name: `<phase>_<dataset>_<model>_<variant>[_<init>_f<pct>_<finetune>]_s<seed>`, e.g. `p1_neu_yolo11n_p2_s0`,
+`p3_ksdd2_yolo11n_A7_T3_f025_freeze_s1`. Each run directory (`results/runs/<name>/`) holds `config.yaml`
+(spec, resolved variant, protocol, library versions), the framework training output, `test_predictions.json`,
+`metrics.json` and `done.json`. `scripts/make_report.py` rebuilds `results/master_results.csv` (one row per run)
+and writes `results/tables/*` and `results/figures/*`.
+
+Main metrics (test split, once, checkpoint chosen on val):
+
+- COCO `AP, AP50, AP75, AP_s/m/l, AR*`, plus `AP50_s`, `AP75_s` and per-class AP
+- relative-size AP / AR (`AP_rel_small`, ...; box area / image area, bins in `protocol.yaml -> eval.rel_bins`)
+- at the operating point (`op_conf`, IoU 0.5): `P, R, F1`, recall per relative and absolute size group
+- TIDE dAP50 per error type (`TIDE_Cls, Loc, Both, Dupe, Bkg, Miss`)
+- `params_M`, `GFLOPs` (torch flop counter, all frameworks), batch-1 latency / FPS in FP32 and FP16
+- image level (phase 3): detection rate, false-alarm rate on defect-free images, image AUROC / AP
+
+## Implementation notes
+
+- **Ultralytics is not forked.** `sdd.models.yolo_trainer.make_trainer(variant)` returns a `DetectionTrainer`
+  subclass whose `get_model` builds the yaml, loads COCO weights, then edits the built network
+  (`sdd.models.surgery`: attention after backbone C3k2 layers, SPD-Conv replacing strided convs). Layer indices
+  never change, so `freeze=`, head routing and weight transfer keep working. The box loss / assigner are swapped
+  in `SDDDetectionModel.init_criterion` (`sdd.models.losses`). The code is pinned to `ultralytics==8.4.163`;
+  after an upgrade run `pytest tests/test_models.py`.
+- NWD is computed in input pixels (Ultralytics' loss works in grid units; the stride is applied back), so
+  `nwd_C` in `variants.yaml` is a pixel constant.
+- Predictions are exported by our own code (not Ultralytics `save_json`) with the image / category ids of
+  `coco/test.json`, for all three frameworks.
+- YOLO / RT-DETR use Ultralytics' default recipe; Faster R-CNN uses the torchvision reference recipe - "framework
+  defaults, no per-model tuning" (plan §3.1). Record any epoch cut (e.g. RT-DETR) with `epochs:` in the grid.
+- **Large images.** A dataset id `<ds>_t<size>` (e.g. `pcb_t640`) is built on demand from `<ds>`: train/val are
+  cut into overlapping tiles (boxes kept if >= `min_visibility` inside, a share of empty tiles kept), while the
+  test split stays the original full images. A run with `infer: sliced` predicts on tiles + the whole image and
+  merges with class-wise NMS; `reuse_phase: p1` re-scores an existing checkpoint that way without training.
+  Tables group `pcb_t640` rows under `pcb`, labelled `(tiles 640)` / `+SAHI`; the FPS column is per 640 forward,
+  `e2e_sliced_total_ms` is the real per-image cost of sliced inference.
+- **Feature maps.** `scripts/feature_maps.py --runs <run> <run> ... --dataset <ds>` puts the same test images
+  (by default those with the smallest defects) through several runs and plots the channel-mean activation of
+  backbone layers 2/4/6/8 (stride 4-32) with the GT boxes; `--channels-layer` adds the per-channel grid,
+  `--pre-attention` reads wrapped layers before their attention module.
+- The freeze fine-tune mode is two Ultralytics runs (frozen backbone for `freeze_epochs`, then all layers from
+  that checkpoint); the LR schedule restarts in the second stage.

@@ -1,0 +1,29 @@
+# Where raw datasets live and where processed data / results are written.
+# The active profile is chosen automatically (Kaggle if /kaggle/input exists, else local)
+# and can be forced with the env var SDD_PROFILE=kaggle|local.
+# A single raw root can also be overridden with SDD_RAW_<DATASET>=<path> (e.g. SDD_RAW_NEU=/kaggle/input/foo).
+#
+# Raw roots only need to point at the top folder of the attached dataset: readers search recursively.
+# Kaggle dataset slugs below are placeholders -- edit them to the datasets you attach with "Add Data".
+
+kaggle:
+  raw:
+    neu: /kaggle/input/neu-surface-defect-database
+    gc10: /kaggle/input/gc10det
+    pcb: /kaggle/input/pcb-defects
+    mt: /kaggle/input/magnetic-tile-surface-defects
+    ksdd2: /kaggle/input/kolektorsdd2
+  work: /kaggle/working/work          # processed YOLO/COCO data
+  results: /kaggle/working/results    # runs, metrics, tables, figures
+  weights: /kaggle/working/weights    # COCO-pretrained checkpoints cache
+
+local:
+  raw:
+    neu: data/raw/NEU-DET
+    gc10: data/raw/GC10-DET
+    pcb: data/raw/PCB_DATASET
+    mt: data/raw/Magnetic-Tile-Defect
+    ksdd2: data/raw/KolektorSDD2
+  work: work
+  results: results
+  weights: work/weights

@@ -1,0 +1,52 @@
+# Model variants. A run is (model, variant); `model` picks the framework family, `variant` the modifications.
+#
+# Fields (YOLO family only; RT-DETR and Faster R-CNN only accept `base`):
+#   model_cfg:  architecture yaml (Ultralytics built-in name or path relative to repo root)
+#   weights:    COCO-pretrained checkpoint used for initialisation (plan §3.1)
+#   backbone:   none | simam | cbam | ca | spd         -> src/sdd/models/surgery.py
+#   attn_layers: backbone layer indices that get attention appended (default: all backbone C3k2 = [2, 4, 6, 8])
+#   spd_layers: backbone strided Conv indices replaced by SPD-Conv (default [1, 3, 5, 7]; stem 0 kept)
+#   loss:       ciou | nwd | wiou | inner_ciou          -> src/sdd/models/losses.py
+#   nwd_ratio:  weight r of NWD in (1-r)*L_CIoU + r*L_NWD
+#   nwd_C:      NWD normalising constant in PIXELS at 640 input (paper: 12.8 for AI-TOD; TBD: ~mean small-box size from EDA)
+#   assigner_nwd: also blend NWD into the TaskAlignedAssigner metric (record in report: "loss + assigner" vs "loss only")
+#   inner_ratio: Inner-IoU auxiliary box scale (<1 helps high-IoU samples, paper 0.7-0.8)
+#   inherit:    list of variants merged left-to-right before this entry's own keys
+
+variants:
+  base:
+    model_cfg: yolo11n.yaml
+    weights: yolo11n.pt
+    backbone: none
+    loss: ciou
+
+  # ---------- neck / head ----------
+  p2:
+    inherit: [base]
+    model_cfg: configs/models/yolo11n-p2.yaml
+  p2p4:
+    inherit: [base]
+    model_cfg: configs/models/yolo11n-p2p4.yaml
+
+  # ---------- backbone ----------
+  simam: {inherit: [base], backbone: simam}
+  cbam: {inherit: [base], backbone: cbam}
+  ca: {inherit: [base], backbone: ca}
+  spd: {inherit: [base], backbone: spd}
+
+  # ---------- loss ----------
+  nwd: {inherit: [base], loss: nwd, nwd_ratio: 0.5, nwd_C: 12.8, assigner_nwd: false}
+  nwd_assign: {inherit: [nwd], assigner_nwd: true}
+  wiou: {inherit: [base], loss: wiou}
+  inner: {inherit: [base], loss: inner_ciou, inner_ratio: 0.75}
+
+  # ---------- phase-2 ablation (plan §5.4) ----------
+  # TBD after phase 1: swap the backbone / loss entries below for the ones the diagnosis points to (plan §5.1).
+  A0: {inherit: [base]}
+  A1: {inherit: [p2]}
+  A2: {inherit: [simam]}
+  A3: {inherit: [nwd]}
+  A4: {inherit: [p2, simam]}
+  A5: {inherit: [p2, nwd]}
+  A6: {inherit: [simam, nwd]}
+  A7: {inherit: [p2, simam, nwd]}

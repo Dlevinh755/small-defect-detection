@@ -1,0 +1,10 @@
+# Phase 1 (Thường kỳ): baselines + one small improvement (plan §4).
+# Grid = datasets x runs x seeds. Order matters: runs execute top to bottom (plan §4.3 priority).
+phase: p1
+datasets: [neu, gc10, pcb, mt]
+seeds: [0]
+runs:
+  - {model: yolo11n, variant: base}
+  - {model: yolo11n, variant: p2}       # the small improvement (alt: variant simam if backbone is required)
+  - {model: frcnn, variant: base}
+  - {model: rtdetr-l, variant: base}    # heaviest; add epochs: <n> here if quota runs short (record it!)

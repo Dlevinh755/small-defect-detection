@@ -1,0 +1,67 @@
+# Dataset registry. Keys are the short dataset ids used everywhere (run names, dirs, CLI).
+#
+# reader:      voc | ksdd2 | magnetic_tile   (see src/sdd/data/readers.py)
+# classes:     final class order (YOLO id = index). Raw names are mapped with class_map (case-insensitive).
+# split:       ratios for train/val/test (stratified, seed 42) or "official" (dataset ships train/test; val carved from train)
+# min_area:    mask datasets only - connected components smaller than this (pixels) are dropped (plan §2.3, TBD 4-9)
+# mask_thr:    mask datasets only - pixel > mask_thr is foreground (Magnetic Tile masks may be soft)
+# role:        source | target (target datasets are never used in phases 1-2)
+
+split_seed: 42
+
+datasets:
+  neu:
+    name: NEU-DET
+    reader: voc
+    role: source
+    classes: [crazing, inclusion, patches, pitted_surface, rolled-in_scale, scratches]
+    class_map: {}
+    split: {train: 0.8, val: 0.1, test: 0.1}   # 1440/180/180 like DAC-YOLO
+
+  gc10:
+    name: GC10-DET
+    reader: voc
+    role: source
+    classes: [punching_hole, welding_line, crescent_gap, water_spot, oil_spot,
+              silk_spot, inclusion, rolled_pit, crease, waist_folding]
+    class_map:
+      1_chongkong: punching_hole
+      2_hanfeng: welding_line
+      3_yueyawan: crescent_gap
+      4_shuiban: water_spot
+      5_youban: oil_spot
+      6_siban: silk_spot
+      7_yiwu: inclusion
+      8_yahen: rolled_pit
+      9_zhehen: crease
+      10_yaozhe: waist_folding
+    split: {train: 0.8, val: 0.1, test: 0.1}   # TBD: check for a standard split in the literature
+
+  pcb:
+    name: PKU-Market-PCB
+    reader: voc
+    role: source
+    classes: [missing_hole, mouse_bite, open_circuit, short, spur, spurious_copper]
+    class_map: {}
+    split: {train: 0.8, val: 0.1, test: 0.1}
+
+  mt:
+    name: Magnetic-Tile
+    reader: magnetic_tile
+    role: source
+    classes: [blowhole, break, crack, fray, uneven]
+    class_map: {}
+    include_clean: true      # MT_Free images kept as background (empty label files)
+    min_area: 9
+    mask_thr: 127
+    split: {train: 0.8, val: 0.1, test: 0.1}
+
+  ksdd2:
+    name: KolektorSDD2
+    reader: ksdd2
+    role: target             # held out until phase 3
+    classes: [defect]
+    class_map: {}
+    min_area: 9
+    mask_thr: 0
+    split: {official: true, val: 0.1}

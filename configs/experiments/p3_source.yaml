@@ -1,0 +1,10 @@
+# Phase 3 step 1: train the "common models" on the source data (plan §6.2, T2/T3 initialisations).
+# `merged` = union of the source datasets listed in `merge` (classes prefixed by dataset id), built by
+#   python scripts/prepare_data.py --merge neu gc10 pcb mt --name merged
+# TBD: all sources merged vs only the closest domain -> add another dataset id here to compare.
+phase: p3src
+datasets: [merged]
+seeds: [0]
+runs:
+  - {model: yolo11n, variant: base}   # -> init T2
+  - {model: yolo11n, variant: A7}     # -> init T3 (replace A7 with the configuration chosen in phase 2)

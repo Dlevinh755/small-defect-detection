@@ -1,0 +1,14 @@
+# Phase 2 screening: each candidate module alone, 1 seed, to pick what goes into A2/A3 (plan §5.2).
+phase: p2s
+datasets: [neu, gc10]
+seeds: [0]
+runs:
+  - {model: yolo11n, variant: p2p4}
+  - {model: yolo11n, variant: simam}
+  - {model: yolo11n, variant: cbam}
+  - {model: yolo11n, variant: ca}
+  - {model: yolo11n, variant: spd}
+  - {model: yolo11n, variant: nwd}
+  - {model: yolo11n, variant: nwd_assign}
+  - {model: yolo11n, variant: wiou}
+  - {model: yolo11n, variant: inner}

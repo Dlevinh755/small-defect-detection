@@ -1,0 +1,15 @@
+# Phase 3 step 2: transfer to the target dataset (plan §6.2).
+# Grid = inits x fractions x finetune x seeds on the target dataset.
+phase: p3
+datasets: [ksdd2]
+seeds: [0, 1, 2]
+fractions: [0.1, 0.25, 0.5, 1.0]     # of the target train split, stratified defect/clean, fixed seed
+finetune: [full, freeze]             # freeze = backbone frozen for `freeze_epochs`, then everything trained
+freeze_layers: 11                    # YOLO11 backbone = layers 0-10
+freeze_epochs: 10
+inits:
+  T1: {variant: base, from: coco}                      # COCO-pretrained YOLO11n
+  T2: {variant: base, from: p3src_merged_yolo11n_base_s0}  # run name of the source model
+  T3: {variant: A7, from: p3src_merged_yolo11n_A7_s0}
+runs:
+  - {model: yolo11n}

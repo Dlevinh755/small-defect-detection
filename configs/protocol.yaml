@@ -1,0 +1,65 @@
+# Shared experimental protocol (plan §3). Every run reads its defaults from here;
+# a grid entry may override epochs/batch, and the override is recorded in the run's config.yaml.
+
+imgsz: 640
+workers: 4
+amp: true
+
+families:
+  yolo:            # YOLO11n and all its variants (Ultralytics)
+    epochs: 100
+    batch: 16
+    patience: 0    # 0 disables early stopping in Ultralytics
+  rtdetr:          # RT-DETR-l (Ultralytics)
+    epochs: 60
+    batch: 8
+    patience: 0
+  frcnn:           # Faster R-CNN R50-FPN v2 (torchvision)
+    epochs: 24
+    batch: 8
+    lr: 0.01       # torchvision reference recipe scaled to batch 8 (0.02 @ 16)
+    momentum: 0.9
+    weight_decay: 0.0001
+    lr_steps: [16, 22]
+    warmup_iters: 500
+    eval_every: 2  # val COCO-AP every N epochs for checkpoint selection
+
+seeds:
+  p1: [0]
+  p2: [0, 1, 2]
+  p3: [0, 1, 2]
+  final: [0, 1, 2, 3, 4]
+
+eval:
+  pred_conf: 0.001        # conf threshold for the exported detections (COCO AP needs the full PR curve)
+  pred_iou: 0.7           # NMS IoU used for export (Ultralytics val default)
+  max_det: 300
+  op_conf: 0.25           # operating point for precision / recall / size-recall / image-level metrics (TBD)
+  match_iou: 0.5
+  # relative-size groups: box_area / image_area. TBD after EDA (plan §1.2) - aim for >=50 test boxes per group.
+  rel_bins: [0.0, 0.005, 0.02, 1.0]
+  rel_names: [rel_small, rel_medium, rel_large]
+  tide: true
+
+# Tiling (training data) and sliced inference (SAHI-style, Akyon et al. 2022) for large images (plan §5.1).
+# A dataset id "<ds>_t<size>" (e.g. pcb_t640) is built automatically from <ds>: train/val are cut into tiles,
+# test stays the ORIGINAL full images, so tiled runs are scored on the same test set as everything else.
+tiling:
+  overlap: 0.2              # fraction of the tile size shared by neighbouring tiles
+  min_visibility: 0.5       # keep a clipped box only if >= this fraction of its area lies inside the tile
+  keep_empty: 0.1           # fraction of defect-free tiles kept in train/val (background examples)
+sahi:
+  tile: 640
+  overlap: 0.2
+  full_image: true          # also predict on the whole (resized) image, as SAHI's standard prediction
+  merge_iou: 0.5            # class-wise NMS IoU when merging tile + full-image detections
+  batch: 16
+
+benchmark:
+  warmup: 50
+  iters: 200
+  half: true              # FPS reported in FP16 (FP32 also measured)
+
+smoke:                    # --smoke: pipeline check on a tiny budget
+  epochs: 1
+  fraction: 0.1

@@ -1,0 +1,11 @@
+# Phase 2 (Giữa kỳ): ablation A0-A7, 3 seeds (plan §5.4). ~48 GPU-h in full.
+# Budget option (b): run A0, A1-A3, A7 with 3 seeds first (this file), then p2_ablation_rest.yaml.
+phase: p2
+datasets: [neu, gc10]
+seeds: [0, 1, 2]
+runs:
+  - {model: yolo11n, variant: A0}
+  - {model: yolo11n, variant: A1}
+  - {model: yolo11n, variant: A2}
+  - {model: yolo11n, variant: A3}
+  - {model: yolo11n, variant: A7}

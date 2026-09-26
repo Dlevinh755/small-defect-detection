@@ -1,0 +1,9 @@
+# Kaggle already ships torch/torchvision/numpy/pandas/opencv; these are the extras.
+ultralytics==8.4.163
+pycocotools>=2.0.7
+tidecv>=1.0.1
+scipy
+seaborn
+pyyaml
+tqdm
+pytest

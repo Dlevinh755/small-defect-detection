@@ -1,0 +1,7 @@
+phase: p2
+datasets: [neu, gc10]
+seeds: [0]
+runs:
+  - {model: yolo11n, variant: A4}
+  - {model: yolo11n, variant: A5}
+  - {model: yolo11n, variant: A6}

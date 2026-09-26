@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdd"
+version = "0.1.0"
+description = "Small surface defect detection: baselines, small-object improvements and transfer learning"
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics==8.4.163",   # pinned: sdd.models relies on BboxLoss / v8DetectionLoss / DetectionModel internals
+    "torch>=2.1",
+    "torchvision>=0.16",
+    "pycocotools>=2.0.7",
+    "tidecv>=1.0.1",
+    "numpy",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "seaborn",
+    "opencv-python-headless",
+    "pillow",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
