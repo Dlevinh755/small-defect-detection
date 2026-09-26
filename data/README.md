@@ -7,6 +7,12 @@ to `<raw>/MANIFEST.md` - paste that table below. Raw data is never committed; pa
 Known data issues found by the checks:
 - Magnetic Tile: 6 images in `MT_Uneven` have an empty (4) or near-empty (26-45 px) mask -> skipped by the reader
   (otherwise they would become false "clean" backgrounds); 19 mask components < `min_area` dropped.
+- GC10-DET (Kaggle `alex000kim/gc10det`): class 10 is spelled `10_yaozhed` (mapped to waist_folding); one object is
+  labelled `d` -> dropped via `ignore_classes` and reported.
+- KolektorSDD2 (official zip): stray duplicates `train/10301 (copy).png` and `train/10301_GT (copy).png` -> skipped
+  (no matching mask); 3335 images remain (356 defective, as published); 3 mask components < `min_area` dropped.
+- Verified on Kaggle (2026-09-26): NEU-DET 1800 images / 4189 boxes, PKU-Market-PCB 693 / 2953, Magnetic Tile
+  1338 / 443 (386 defective, 952 clean).
 
 | id | Dataset | Source (fill in) | License | Downloaded | Notes |
 |---|---|---|---|---|---|

@@ -105,9 +105,10 @@ def _pick_image(xml: Path, candidates: list[Path]) -> Path:
 
 def read_voc(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]:
     lookup = _class_lookup(cfg)
+    ignore = {_norm(str(c)) for c in cfg.get("ignore_classes") or []}
     images = _index_images(root)
     rep = ReadReport()
-    samples, seen, unknown = [], set(), Counter()
+    samples, seen, unknown, ignored = [], set(), Counter(), Counter()
     for xml in sorted(root.rglob("*.xml")):
         if xml.stem in seen:
             rep.duplicates += 1
@@ -122,6 +123,10 @@ def read_voc(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]:
         boxes, classes = [], []
         for o in r.findall("object"):
             name = _norm(o.findtext("name", ""))
+            if name in ignore:  # known annotation errors listed in datasets.yaml -> object dropped, reported
+                ignored[name] += 1
+                rep.notes.append(f"ignored object '{name}' in {xml.name}")
+                continue
             if name not in lookup:
                 unknown[name] += 1
                 continue
@@ -135,7 +140,9 @@ def read_voc(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]:
         rep.dropped_degenerate += int((~keep).sum())
         samples.append(Sample(xml.stem, img, w, h, boxes[keep], np.asarray(classes, int)[keep]))
     if unknown:
-        raise ValueError(f"Unknown class names {dict(unknown)} in {root}; add them to class_map in datasets.yaml")
+        raise ValueError(f"Unknown class names {dict(unknown)} in {root}; add them to class_map in datasets.yaml "
+                         "(or to ignore_classes if they are annotation errors)")
+    rep.dropped_degenerate += sum(ignored.values())
     rep.n_images, rep.n_boxes = len(samples), sum(len(s.boxes) for s in samples)
     return samples, rep
 
@@ -205,11 +212,12 @@ def read_ksdd2(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]:
         for img in sorted(p for p in d.glob("*.png") if not p.stem.endswith("_GT")):
             mask_path = img.with_name(f"{img.stem}_GT.png")
             w, h = _image_size(img)
-            if mask_path.exists():
-                boxes, dropped = mask_to_boxes(_read_mask(mask_path), cfg.get("mask_thr", 0), cfg.get("min_area", 4))
-            else:
-                boxes, dropped = np.zeros((0, 4)), 0
-                rep.notes.append(f"missing mask {mask_path}")
+            if not mask_path.exists():
+                # every official KSDD2 image has a mask (all-zero for defect-free parts); an image without one is a
+                # stray file (the official zip contains e.g. "10301 (copy).png") -> skipped, never a "clean" image
+                rep.notes.append(f"skipped {split}/{img.name}: no mask {mask_path.name}")
+                continue
+            boxes, dropped = mask_to_boxes(_read_mask(mask_path), cfg.get("mask_thr", 0), cfg.get("min_area", 4))
             rep.dropped_small += dropped
             samples.append(
                 Sample(f"{split}_{img.stem}", img, w, h, boxes, np.zeros(len(boxes), int), {"official_split": split})

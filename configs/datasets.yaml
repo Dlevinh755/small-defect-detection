@@ -8,6 +8,7 @@
 #              whole groups go to one split (prevents leakage, plan §2.1 note on PKU-PCB).
 # min_area:    mask datasets only - connected components smaller than this (pixels) are dropped (plan §2.3, TBD 4-9)
 # mask_thr:    mask datasets only - pixel > mask_thr is foreground (Magnetic Tile masks may be soft)
+# ignore_classes: raw object names that are annotation errors -> object dropped and listed in the read report
 # role:        source | target (target datasets are never used in phases 1-2)
 # balance:     class-imbalance handling for <ds>_bal_v1 (plan §2.5.5; global knobs in protocol.yaml -> balance)
 #   mode:        "auto" (only if max/min boxes per class >= imbalance_threshold) | "on" | "off" (quoted: bare on/off are YAML booleans)
@@ -43,6 +44,8 @@ datasets:
       8_yahen: rolled_pit
       9_zhehen: crease
       10_yaozhe: waist_folding
+      10_yaozhed: waist_folding     # spelling used in the Kaggle mirror (alex000kim/gc10det)
+    ignore_classes: [d]             # 1 stray object labelled "d" in the Kaggle mirror: dropped and reported
     split: {train: 0.8, val: 0.1, test: 0.1}   # TBD: check for a standard split in the literature
     # rot90 left out until checked visually: some defects may follow the rolling direction (plan §2.5.5)
     balance: {mode: "on", geo_ops: [hflip, vflip], copy_paste: true}

@@ -30,9 +30,11 @@ def test_checks_on_synthetic_raw(raw_data):
     neu = check_dataset("neu", Path(os.environ["SDD_RAW_NEU"]), src["neu"])
     assert neu["images"] == 30 and neu["status"] == "warn" and "expected ~1800" in neu["messages"][0]
     ks = check_dataset("ksdd2", Path(os.environ["SDD_RAW_KSDD2"]), src["ksdd2"])
-    assert ks["split_images"] == {"train": 12, "test": 6} and ks["clean_images"] == 12
+    assert ks["split_images"] == {"train": 12, "test": 6} and ks["clean_images"] == 12  # "(copy)" strays skipped
+    assert any("(copy)" in m for m in ks["messages"])
     gc = check_dataset("gc10", Path(os.environ["SDD_RAW_GC10"]), src["gc10"])
     assert gc["unlabeled_images_skipped"] == 0 and gc["classes_present"] == 4
+    assert any("ignored object 'd'" in m for m in gc["messages"])  # stray label (ignore_classes), reported
     assert check_dataset("pcb", Path(raw_data) / "nope", src["pcb"])["status"] == "missing"
     empty = Path(raw_data) / "empty_pcb"
     empty.mkdir(exist_ok=True)

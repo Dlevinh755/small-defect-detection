@@ -71,6 +71,9 @@ def make_ksdd2(root: Path, n_train: int = 12, n_test: int = 6, seed: int = 0):
                 img[mask > 0] = 200
             cv2.imwrite(str(d / f"{split}{i:04d}.png"), img)
             cv2.imwrite(str(d / f"{split}{i:04d}_GT.png"), mask)
+        # stray duplicates like the official zip ("10301 (copy).png", "10301_GT (copy).png") must be ignored
+        cv2.imwrite(str(d / f"{split}0000 (copy).png"), img)
+        cv2.imwrite(str(d / f"{split}0000_GT (copy).png"), mask)
 
 
 GC10_COUNTS = {"1_chongkong": 24, "2_hanfeng": 12, "3_yueyawan": 5, "4_shuiban": 3}  # imbalanced on purpose
@@ -90,6 +93,8 @@ def make_gc10(root: Path, seed: int = 0):
                 x, y = int(rng.integers(1, 400 - w)), int(rng.integers(1, 300 - h))
                 cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (20 + 50 * ci, 230, 40), -1)
                 objs.append((name, (x + 1, y + 1, x + w, y + h)))
+            if k == 0:
+                objs.append(("d", (5, 5, 20, 20)))          # stray label as in the Kaggle mirror -> ignored
             k += 1
             d = root / str(ci + 1)
             d.mkdir(exist_ok=True)
