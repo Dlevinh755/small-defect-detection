@@ -1,10 +1,12 @@
-"""Fixed train/val/test splits (plan §2.3): created once with seed 42, saved to ``splits/<ds>/*.txt``, never redrawn."""
+"""Fixed train/val/test splits (plan §2.3, §2.5.3a): created once with seed 42, saved to ``splits/<ds>/*.txt``,
+never redrawn. Stratified by the rarest class present in each image, or by group (``group_regex``)."""
 
 from __future__ import annotations
 
 import logging
 import random
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..config import SPLITS
@@ -53,14 +55,57 @@ def stratified_split(keys: dict[str, str], ratios: dict[str, float], seed: int) 
     return {s: sorted(v) for s, v in out.items()}
 
 
+def rarest_class_keys(samples: list[Sample]) -> dict[str, str]:
+    """Stratification key per image = its rarest class (by number of images containing it), 'clean' if none.
+
+    Keying on the rarest class (not the dominant one) guarantees rare classes appear in train, val and test
+    (plan §2.5.3a)."""
+    freq = Counter(c for s in samples for c in set(s.classes.tolist()))
+    keys = {}
+    for s in samples:
+        cls = set(s.classes.tolist())
+        keys[s.uid] = str(min(cls, key=lambda c: (freq[c], c))) if cls else "clean"
+    return keys
+
+
+def group_split(samples: list[Sample], groups: dict[str, str], ratios: dict[str, float],
+                seed: int) -> dict[str, list[str]]:
+    """Whole groups (e.g. physical boards) go to one split; groups are assigned largest-first to the split that is
+    furthest below its target image count."""
+    members = defaultdict(list)
+    for s in samples:
+        members[groups[s.uid]].append(s.uid)
+    order = sorted(members)
+    random.Random(seed).shuffle(order)
+    order.sort(key=lambda g: -len(members[g]))  # stable: equal-size groups keep the seeded order
+    total = sum(ratios.values())
+    target = {k: len(samples) * v / total for k, v in ratios.items()}
+    out = {k: [] for k in ratios}
+    for g in order:
+        k = max(out, key=lambda k: target[k] - len(out[k]))
+        out[k].extend(members[g])
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def make_splits(samples: list[Sample], cfg: dict, seed: int) -> dict[str, list[str]]:
     sp = cfg["split"]
     if sp.get("official"):
-        train = {s.uid: s.strat_key for s in samples if s.meta.get("official_split") == "train"}
+        tr = [s for s in samples if s.meta.get("official_split") == "train"]
         test = sorted(s.uid for s in samples if s.meta.get("official_split") == "test")
-        tv = stratified_split(train, {"train": 1 - sp["val"], "val": sp["val"]}, seed)
+        tv = stratified_split(rarest_class_keys(tr), {"train": 1 - sp["val"], "val": sp["val"]}, seed)
         return {"train": tv["train"], "val": tv["val"], "test": test}
-    return stratified_split({s.uid: s.strat_key for s in samples}, {k: sp[k] for k in SPLIT_NAMES}, seed)
+    ratios = {k: sp[k] for k in SPLIT_NAMES}
+    if sp.get("group_regex"):
+        rx = re.compile(sp["group_regex"])
+        groups = {}
+        for s in samples:
+            m = rx.search(s.uid)
+            if not m:
+                raise ValueError(f"group_regex {sp['group_regex']!r} does not match '{s.uid}'")
+            groups[s.uid] = m.group(1)
+        log.info("group split: %d groups", len(set(groups.values())))
+        return group_split(samples, groups, ratios, seed)
+    return stratified_split(rarest_class_keys(samples), ratios, seed)
 
 
 def split_dir(dataset: str) -> Path:

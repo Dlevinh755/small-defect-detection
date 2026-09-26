@@ -14,7 +14,7 @@
 1. Bài toán, câu hỏi nghiên cứu, giả thuyết
 2. Dữ liệu
 3. Protocol thực nghiệm chung (áp dụng cho MỌI lần chạy)
-4. Giai đoạn 1 – Thường kỳ: Baseline + cải tiến nhỏ
+4. Giai đoạn 1 – Thường kỳ: Baseline + xử lý mất cân bằng (tăng cường) + cải tiến nhỏ
 5. Giai đoạn 2 – Giữa kỳ: Cải tiến Backbone / Loss + bảng so sánh
 6. Giai đoạn 3 – Cuối kỳ: Transfer Learning sang dữ liệu thực tế
 7. Nhánh Publish (song song, không bắt buộc cho học phần)
@@ -92,6 +92,8 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 | **KolektorSDD2** | Linh kiện điện | 3335 ảnh (356 lỗi), ~230×630 | mask → bbox | **Đích (Cuối kỳ)** – giữ riêng, KHÔNG dùng để tinh chỉnh ở GĐ1–2 | ✅ đề xuất |
 | Dữ liệu tự thu thập | ❓ | ❓ | ❓ | Đích thay thế / bổ sung | ❓ HỎI – có nguồn doanh nghiệp/xưởng không? |
 
+**Lưu ý về PKU-Market-PCB:** bộ "PCB Defects" trên Roboflow (dùng trong slide N1 và notebook DETR-SE) có cùng 6 lớp (missing_hole, mouse_bite, open_circuit, short, spur, spurious_copper) → nhiều khả năng **cùng nguồn PKU-Market-PCB**, không tính là một bộ riêng. PKU-Market-PCB được tạo từ khoảng 10 bo mạch gốc có lỗi thêm nhân tạo → khi chia dữ liệu cần kiểm tra **rò rỉ theo bo mạch** (cùng một bo xuất hiện ở cả train và test). ⏳ TBD: nếu tên file cho biết bo gốc thì chia theo bo (group split).
+
 **Quyết định mở:**
 - ❓ HỎI giảng viên: báo cáo Thường kỳ cần đúng 4 dataset? Nếu có → dùng NEU-DET, GC10-DET, PKU-PCB, Magnetic Tile (giữ KSDD2 cho cuối kỳ).
 - ⏳ TBD: nếu có dữ liệu thật tự thu thập → KSDD2 chuyển thành dữ liệu nguồn.
@@ -121,13 +123,102 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 
 ### 2.4. Phân tích dữ liệu (EDA) – bắt buộc cho báo cáo Thường kỳ
 - [ ] Số ảnh, số box, số lớp, số box/ảnh
-- [ ] Phân bố lớp (kiểm tra mất cân bằng)
+- [ ] Phân bố lớp **theo cả số ảnh lẫn số box**, trên từng split (train/val/test) → điền bảng 2.5.2
+- [ ] Tỉ lệ ảnh có lỗi / ảnh không lỗi (KSDD2, Magnetic Tile)
 - [ ] **Histogram diện tích box** (tuyệt đối & tương đối, trục log)
 - [ ] Tỉ lệ small/medium/large theo từng lớp
 - [ ] **GC10-DET, PKU-PCB:** kích thước box **trước và sau resize về 640** → minh chứng lỗi bị co nhỏ
 - [ ] Tỉ lệ khung hình (aspect ratio) của box – lỗi dạng vết dài (scratch, weld line)
 - [ ] Ảnh minh họa lỗi nhỏ nhất mỗi lớp
 - ⏳ TBD sau EDA: chốt ngưỡng nhóm kích thước tương đối (Mục 1.2)
+
+### 2.5. Xử lý mất cân bằng dữ liệu
+
+#### 2.5.1. Ba dạng mất cân bằng cần theo dõi
+| Dạng | Mô tả | Bộ dữ liệu bị ảnh hưởng | Có cần xử lý riêng? |
+|---|---|---|---|
+| **Giữa các lớp lỗi** | Có lớp rất ít mẫu (vd. rolled pit, crease ở GC10; fray ở Magnetic Tile) | GC10-DET (nặng), Magnetic Tile (vừa), NEU-DET (nhẹ – cân bằng theo ảnh, nhưng số box/lớp không đều) | Có (Mục 2.5.3) |
+| **Ảnh lỗi vs ảnh không lỗi** | Ảnh không lỗi chiếm đa số | KSDD2 (~1:8), Magnetic Tile (392:952) | Có (Mục 2.5.3, 6.2) |
+| **Theo kích thước lỗi** | Lỗi nhỏ nhiều/ít tùy bộ | Tất cả | Đây là **trọng tâm đề tài** – đo trong EDA, xử lý bằng cải tiến kiến trúc/loss (Mục 5) |
+| Vật thể vs nền (trong ảnh) | Đặc trưng có sẵn của detection | Tất cả | **Không** – detector hiện đại đã xử lý (TAL assigner, focal/BCE, Hungarian matching) |
+
+#### 2.5.2. Bảng thống kê mất cân bằng (điền sau EDA)
+| Dataset | Lớp nhiều nhất (số box) | Lớp ít nhất (số box) | Tỉ lệ max/min | Ảnh lỗi : ảnh không lỗi | Số box test của lớp ít nhất | Mức độ |
+|---|---|---|---|---|---|---|
+| NEU-DET | ⏳ | ⏳ | ⏳ | chỉ có ảnh lỗi | ⏳ | ⏳ |
+| GC10-DET | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| PKU-PCB / MT | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| KSDD2 | 1 lớp | – | – | ~1:8 | ⏳ | ⏳ |
+
+Quy ước mức độ (đề xuất): max/min < 3 → nhẹ; 3–10 → vừa; > 10 → nặng. Lớp có **< 10 box ở tập test** → đánh dấu "AP không ổn định", không rút kết luận riêng cho lớp đó.
+
+#### 2.5.3. Phương pháp xử lý
+
+**(a) Cấp chia dữ liệu – BẮT BUỘC, áp dụng ngay từ GĐ1**
+- Chia **stratified theo lớp** (mỗi ảnh gán theo lớp hiếm nhất có trong ảnh) để lớp hiếm có mặt ở cả train/val/test.
+- **Chỉ can thiệp vào tập train. Tuyệt đối KHÔNG cân bằng lại val/test** – hai tập này phải giữ phân bố thật, nếu không kết quả bị thổi phồng.
+- Ảnh không lỗi giữ trong val/test đúng tỉ lệ gốc (để đo báo nhầm).
+
+**(b) Cấp dữ liệu train – ÁP DỤNG TỪ GĐ1** (quy trình chi tiết: Mục 2.5.5)
+| Kỹ thuật | Cách làm | Áp dụng cho | Ghi chú |
+|---|---|---|---|
+| **Class-aware augmentation offline** (chính, GĐ1) | Ảnh chứa lớp hiếm được sinh thêm bản sao **đã biến đổi** (lật/xoay + độ sáng, tương phản, gamma, nhiễu nhẹ); số bản sao theo hệ số repeat factor r_c = min(cap, max(1, sqrt(t / f_c))), f_c = tỉ lệ ảnh train chứa lớp c | Bộ có mất cân bằng lớp (GC10, MT; NEU/PKU nếu EDA cho thấy max/min ≥ 3) | Code: Phụ lục A.6. Khác RFS thuần ở chỗ **không nhân bản y hệt** → giảm học thuộc |
+| **Copy-paste lỗi hiếm (bbox)** (chính, GĐ1) | Cắt lỗi lớp hiếm kèm viền nền, dán sang ảnh train khác, không chồng box, hòa trộn biên mềm + khớp độ sáng nền; **không thu nhỏ** patch | GC10, MT, PKU (lỗi nhỏ, nền đồng nhất) | Code: Phụ lục A.7. Không dùng cho lớp có box chiếm gần hết ảnh (vd. crazing, rolled-in scale của NEU) |
+| Repeat Factor Sampling thuần (Gupta et al. 2019, LVIS) | Nhân bản y hệt ảnh chứa lớp hiếm | Như trên | Phương án dự phòng nếu thiếu thời gian. Code: Phụ lục A.5 |
+| Điều chỉnh tỉ lệ ảnh nền | Giữ 1:1, 1:3, toàn bộ ảnh không lỗi trong **train** | KSDD2, Magnetic Tile | Siêu tham số ở GĐ3 (Mục 6.2) |
+| Copy-paste theo mask (Ghiasi et al. 2021) | Dán chính xác theo đường viền lỗi | KSDD2, Magnetic Tile (có mask) | GĐ3 / mở rộng. `copy_paste` của Ultralytics cần nhãn segment; bản bbox (A.7) dùng được ngay |
+| Mosaic (mặc định YOLO) | Ghép 4 ảnh | Tất cả | Đã có sẵn trong baseline – không tính là cải tiến |
+
+**(c) Cấp hàm loss – ứng viên cho GĐ2 (cùng nhóm "cải tiến Loss")**
+| Kỹ thuật | Ý tưởng | Cài đặt |
+|---|---|---|
+| Class-weighted BCE | Trọng số lớp ∝ 1/tần suất (hoặc 1/sqrt) | Sửa loss phân loại trong `ultralytics/utils/loss.py` (⏳ kiểm tra phiên bản có sẵn tham số class weight chưa) |
+| Focal loss (Lin et al. 2017) | Giảm trọng số mẫu dễ, tập trung mẫu khó | Có sẵn lớp `FocalLoss` trong Ultralytics – cần nối vào `v8DetectionLoss` |
+
+**(d) Cấp đánh giá – BẮT BUỘC, áp dụng ngay từ GĐ1**
+- Luôn báo **AP theo từng lớp kèm số box test** của lớp đó (bảng phụ).
+- mAP là trung bình macro theo lớp → lớp hiếm nặng ngang lớp phổ biến, nhưng dao động mạnh giữa các seed → báo mean ± std từ GĐ2.
+- Bộ có ảnh không lỗi (KSDD2, Magnetic Tile): thêm **chỉ số mức ảnh** – tỉ lệ phát hiện ảnh lỗi, tỉ lệ báo nhầm trên ảnh không lỗi. **Không dùng accuracy** (đoán "không lỗi" hết đã đạt ~89% trên KSDD2).
+
+#### 2.5.4. Chính sách theo giai đoạn
+| Giai đoạn | Làm gì với mất cân bằng |
+|---|---|
+| **GĐ1 – Thường kỳ** | (a) + (d) + **(b): class-aware augmentation + copy-paste** (Mục 2.5.5). Tất cả mô hình train trên **cùng một phiên bản dữ liệu đã cân bằng** (`<ds>_bal_v1`) → so sánh giữa mô hình vẫn công bằng. Thêm **run đối chứng** YOLO11n trên dữ liệu gốc để đo tác dụng của việc cân bằng. |
+| **GĐ2 – Giữa kỳ** | Dữ liệu `_bal` thành mặc định **nếu GĐ1 cho thấy có lợi**. Nếu lớp hiếm vẫn thấp → thêm biến thể cấp loss (class-weighted / focal) vào ablation (Mục 5.4). ⏳ TBD sau GĐ1. |
+| **GĐ3 – Cuối kỳ** | Tỉ lệ ảnh nền trong train là siêu tham số khi fine-tune KSDD2; báo cáo chỉ số mức ảnh. |
+
+#### 2.5.5. Quy trình cân bằng bằng tăng cường dữ liệu (GĐ1)
+
+**Nguyên tắc bắt buộc**
+1. Làm **sau khi chia** train/val/test. Chỉ sinh dữ liệu cho **train**; nguồn patch copy-paste cũng chỉ lấy từ train. Val/test giữ nguyên.
+2. **Sinh offline một lần** (seed = 42), lưu thành phiên bản dữ liệu cố định `<dataset>_bal_v1` (Kaggle Dataset). Mọi mô hình dùng chung phiên bản này.
+3. Chạy bước sinh dữ liệu trong **notebook CPU** của Kaggle → không tốn quota GPU.
+4. **Không thu nhỏ ảnh / patch, không random crop** → tránh làm lỗi nhỏ biến mất hoặc bị cắt.
+5. Tổng số ảnh train tăng **tối đa +50%** (giữ ngân sách GPU và tránh lệch phân bố quá xa thực tế).
+6. Mục tiêu: mỗi lớp hiếm đạt **≥ 1/3 số ảnh của lớp nhiều nhất** trong train (⏳ điều chỉnh sau khi xem bảng 2.5.2).
+
+**Cấu hình theo bộ dữ liệu** (⏳ chốt sau EDA)
+| Dataset | Có cân bằng? | Phép hình học (offline) | Copy-paste | Ghi chú |
+|---|---|---|---|---|
+| NEU-DET | Chỉ khi max/min (theo box) ≥ 3 | hflip, vflip, rot90, rot180 | Không (nhiều lỗi phủ gần hết ảnh) | Ảnh vuông, kết cấu không định hướng |
+| GC10-DET | **Có** (mất cân bằng nặng) | hflip, vflip (⏳ kiểm tra trực quan trước khi thêm rot90 – một số lỗi có thể gắn với hướng cán) | **Có** cho lớp hiếm có box nhỏ/vừa | Bộ chính để đánh giá tác dụng |
+| PKU-PCB | Chỉ khi max/min ≥ 3 (thường khá cân bằng) | hflip, vflip, rot90, rot180 | Tùy chọn (lỗi nhỏ, nền mạch lặp lại) | Dùng bản **gốc**, không dùng bản Roboflow đã tăng cường 3x |
+| Magnetic Tile | **Có** (fray, crack ít) | hflip, vflip, rot180 | **Có** | Có thể nâng cấp lên copy-paste theo mask |
+
+**Phép biến đổi quang học** (mọi bản sinh thêm): tương phản ×[0.8, 1.2], độ sáng ±20, gamma [0.8, 1.25] (50%), nhiễu Gauss σ 2–6 (30%), blur 3×3 (20%).
+> Ultralytics vẫn áp augmentation online mặc định (mosaic, fliplr, HSV…) cho **mọi** run → phần offline nên ưu tiên các phép mà mặc định không có (vflip, rot90/180, gamma, nhiễu).
+
+**Kiểm tra chất lượng (QA) – bắt buộc trước khi train**
+- [ ] Vẽ box lên **30 ảnh sinh ra** mỗi bộ (15 augment + 15 copy-paste): box phải khớp lỗi, patch dán không lộ đường viền.
+- [ ] Bảng **trước / sau** số ảnh và số box theo lớp (đưa vào slide).
+- [ ] Ghi `t`, `cap`, số ảnh sinh thêm, danh sách phép biến đổi vào nhật ký thực nghiệm.
+- [ ] Kiểm tra số ảnh val/test **không đổi**.
+
+**Đánh giá tác dụng của việc cân bằng**
+- Định nghĩa **lớp hiếm** trước khi train (từ train gốc): số box < 1/3 lớp nhiều nhất. ⏳ Ghi danh sách lớp hiếm từng bộ.
+- Chỉ số: **AP_rare** (trung bình AP các lớp hiếm), **AP_common** (các lớp còn lại), mAP, Recall_small.
+- Tiêu chí "có lợi": AP_rare tăng **và** AP_common không giảm quá ~1 điểm. Vì GĐ1 chỉ 1 seed → ghi rõ là kết quả sơ bộ; nếu còn quota, chạy thêm seed 1 cho cặp đối chứng trên GC10.
+- **Công bằng về số bước huấn luyện:** dữ liệu `_bal` có nhiều ảnh hơn → nhiều iteration hơn mỗi epoch. Run đối chứng trên dữ liệu gốc đặt `epochs = 100 × |train_bal| / |train_gốc|` (khớp số iteration), để phần cải thiện không chỉ đến từ việc train lâu hơn.
 
 ---
 
@@ -144,7 +235,8 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 | Epoch (Faster R-CNN) | ~24 | ⏳ TBD |
 | Batch | 16 (YOLO) / ⏳ TBD cho mô hình nặng theo VRAM | Ghi lại batch thực tế |
 | Optimizer / LR | Mặc định của từng framework | Không tinh chỉnh riêng cho mô hình nào (công bằng) |
-| Augmentation | Mặc định Ultralytics (mosaic, HSV, flip…) | Ghi đầy đủ tham số vào slide |
+| Augmentation online | Mặc định Ultralytics (mosaic, HSV, flip…) | Ghi đầy đủ tham số vào slide |
+| Dữ liệu train | `<dataset>_bal_v1` (cân bằng offline – Mục 2.5.5), trừ run đối chứng | Cùng một phiên bản cho mọi mô hình |
 | Seed | GĐ1: 1 seed (`0`); GĐ2 trở đi: ≥ 3 seed (`0,1,2`); kết quả chốt/paper: 5 seed | |
 | Early stopping | Tắt (hoặc patience lớn) | Tránh so sánh không đồng đều |
 
@@ -153,7 +245,9 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 - COCO: AP (0.5:0.95), AP50, AP75, **AP_small, AP_medium, AP_large**, AR tương ứng
 - Precision, Recall (tại conf mặc định 0.25) ⏳ TBD – chốt ngưỡng conf dùng chung
 - **Recall theo nhóm kích thước tương đối** (Phụ lục A.3) – chỉ số chính cho câu hỏi nghiên cứu
-- Per-class AP (bảng phụ)
+- Per-class AP **kèm số box test mỗi lớp** (bảng phụ – xem Mục 2.5.3d)
+- Bộ có ảnh không lỗi: tỉ lệ phát hiện ảnh lỗi & tỉ lệ báo nhầm ảnh không lỗi
+- ⚠️ Khi chạy COCOeval: **không lọc prediction theo ngưỡng score cao** (dùng conf ≈ 0.001), nếu không AP/AR bị hạ giả tạo
 
 **Chẩn đoán loại lỗi:**
 - Confusion matrix (Ultralytics tự sinh)
@@ -177,12 +271,13 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 
 ---
 
-## 4. Giai đoạn 1 – Thường kỳ: Baseline + cải tiến nhỏ
+## 4. Giai đoạn 1 – Thường kỳ: Baseline + xử lý mất cân bằng (tăng cường) + cải tiến nhỏ
 
 ### 4.1. Mục tiêu
 1. Trả lời sơ bộ **RQ1** (chẩn đoán).
 2. Chọn **mô hình chung** cho cả học phần.
-3. Có **1 cải tiến nhỏ** đúng yêu cầu.
+3. **Xử lý mất cân bằng bằng tăng cường dữ liệu** và đo tác dụng (Mục 2.5.5).
+4. Có **1 cải tiến nhỏ** ở mô hình (P2 hoặc SimAM).
 
 ### 4.2. Mô hình
 
@@ -198,38 +293,60 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 - Trích dẫn nguồn gốc P2: FPN (Lin 2017), TPH-YOLOv5 (Zhu 2021) + 1–2 bài cùng miền (Mục 12). **Không** trình bày P2 là đóng góp mới.
 - Mô hình chung dự kiến: **YOLO11n** ⏳ TBD – xác nhận sau khi có kết quả GĐ1.
 
+**Ma trận run GĐ1**
+| Nhóm | Run | Dữ liệu | Bộ dữ liệu | Mục đích |
+|---|---|---|---|---|
+| Chính | M1–M4 | `_bal_v1` | Cả 4 bộ | So sánh mô hình (cùng dữ liệu) |
+| Đối chứng cân bằng | YOLO11n | **gốc**, epoch khớp iteration | Bộ có cân bằng (GC10, MT; + NEU/PKU nếu có) | Đo tác dụng của cân bằng: so với M1 trên `_bal` |
+| Tùy chọn (nếu dư quota) | YOLO11n | gốc + **chỉ class-aware aug** | GC10 | Tách đóng góp: augmentation vs copy-paste |
+
+> Hai "cải tiến" của GĐ1 đo độc lập: **cân bằng dữ liệu** (YOLO11n gốc vs YOLO11n `_bal`) và **P2** (YOLO11n `_bal` vs YOLO11n-P2 `_bal`).
+
 ### 4.3. Ngân sách GPU (ước lượng – cập nhật sau lần chạy thật)
 
-| Mô hình | NEU | GC10 | PKU/MT | Dataset 4 | Tổng |
-|---|---|---|---|---|---|
-| YOLO11n | ~0.7h | ~1.2h | ~0.4h | ~1h | ~3.3h |
-| YOLO11n-P2 | ~0.9h | ~1.5h | ~0.5h | ~1.3h | ~4.2h |
-| Faster R-CNN | ~1h | ~1.5h | ~0.5h | ~1.2h | ~4.2h |
-| RT-DETR-l | ~2h | ~3.5h | ~1h | ~3h | ~9.5h |
-| **Tổng** | | | | | **~21h** |
+Giả định: GC10 `_bal` tăng ~+50% ảnh train, MT ~+40%, NEU/PKU tăng 0–20%.
 
-Thứ tự ưu tiên chạy: YOLO11n → YOLO11n-P2 → Faster R-CNN → RT-DETR (chạy sau cùng, cắt epoch nếu thiếu quota).
+| Run | NEU | GC10 | PKU | MT | Tổng |
+|---|---|---|---|---|---|
+| YOLO11n (`_bal`) | ~0.8h | ~1.8h | ~0.5h | ~0.7h | ~3.8h |
+| YOLO11n-P2 (`_bal`) | ~1.0h | ~2.3h | ~0.7h | ~0.9h | ~4.9h |
+| Faster R-CNN (`_bal`) | ~1.1h | ~2.3h | ~0.7h | ~0.9h | ~5.0h |
+| RT-DETR-l (`_bal`, 50 epoch) | ~2h | ~5h | ~1.2h | ~1.8h | ~10h |
+| Đối chứng YOLO11n (gốc, epoch khớp iteration) | (~0.8h nếu NEU có cân bằng) | ~1.8h | – | ~0.7h | ~2.5h |
+| **Tổng lõi** | | | | | **~26h** |
+| Tùy chọn: GC10 chỉ-augment | | ~1.6h | | | +1.6h |
+
+- Sinh dữ liệu `_bal` chạy trên **CPU notebook** → 0 giờ GPU.
+- ~26h sát quota ~30h/tuần của **một** tài khoản → **nên chia run theo tài khoản Kaggle của từng thành viên** (mỗi người chạy phần mình phụ trách). ❓ HỎI nhóm.
+- Nếu vẫn thiếu: RT-DETR chỉ chạy 2 bộ (NEU + GC10) hoặc giảm còn 36–40 epoch, ghi rõ trong slide.
+
+Thứ tự ưu tiên chạy: YOLO11n `_bal` → đối chứng YOLO11n gốc → YOLO11n-P2 → Faster R-CNN → RT-DETR (sau cùng).
 
 ### 4.4. Lịch 3 ngày
 
-**Ngày 1 – Dữ liệu + bắt đầu train**
-- [ ] Script convert cả 4 bộ → YOLO + COCO JSON test (Phụ lục A.1, A.2)
+**Ngày 1 – Dữ liệu, cân bằng, bắt đầu train**
+- [ ] Script convert cả 4 bộ → YOLO + COCO JSON test (Phụ lục A.1, A.2); chia stratified
 - [ ] Kiểm tra trực quan: vẽ box lên ~20 ảnh mỗi bộ (bắt lỗi convert)
-- [ ] Chạy nền: YOLO11n + YOLO11n-P2 trên NEU-DET và PKU/MT
-- [ ] EDA (Mục 2.4)
+- [ ] EDA (Mục 2.4) → điền bảng 2.5.2, chốt bộ nào cần cân bằng + danh sách lớp hiếm
+- [ ] **CPU notebook:** sinh `_bal_v1` (Phụ lục A.6, A.7) → QA 30 ảnh/bộ → upload thành Kaggle Dataset
+- [ ] GPU (song song): bắt đầu YOLO11n trên bộ không cần cân bằng (NEU/PKU) trong lúc chờ `_bal`
+- [ ] Chạy nền: YOLO11n `_bal` + đối chứng YOLO11n gốc trên GC10
 
 **Ngày 2 – Chạy hết baseline**
-- [ ] YOLO11n, YOLO11n-P2 trên GC10 và dataset 4
-- [ ] Faster R-CNN (pipeline torchvision) trên 4 bộ
+- [ ] YOLO11n-P2 `_bal` trên 4 bộ; đối chứng MT
+- [ ] Faster R-CNN (pipeline torchvision) trên 4 bộ `_bal`
 - [ ] Bắt đầu RT-DETR
 
 **Ngày 3 – Đánh giá & slide**
 - [ ] Hoàn tất RT-DETR (hoặc ghi rõ số epoch bị cắt)
 - [ ] COCO eval, recall theo nhóm kích thước, TIDE
+- [ ] AP theo lớp → AP_rare / AP_common cho cặp đối chứng (gốc vs `_bal`)
 - [ ] Ảnh minh họa: lỗi nhỏ bị bỏ sót / định vị lệch / nhận nhầm
 - [ ] Làm slide
 
 ### 4.5. Bảng kết quả (điền sau thực nghiệm)
+
+**Bảng A – So sánh mô hình (dữ liệu `_bal`)**
 
 | Dataset | Model | AP | AP50 | AP75 | AP_s | AP_m | AP_l | Recall_small (tương đối) | Params | GFLOPs | FPS |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -237,20 +354,31 @@ Thứ tự ưu tiên chạy: YOLO11n → YOLO11n-P2 → Faster R-CNN → RT-DETR
 | NEU-DET | YOLO11n-P2 | ⏳ | | | | | | | | | |
 | … | … | | | | | | | | | | |
 
+**Bảng B – Tác dụng của xử lý mất cân bằng (YOLO11n)**
+
+| Dataset | Dữ liệu | Số ảnh train | mAP | AP_rare | AP_common | Recall_small | AP từng lớp hiếm |
+|---|---|---|---|---|---|---|---|
+| GC10-DET | Gốc (epoch khớp iteration) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| GC10-DET | `_bal` (aug + copy-paste) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| GC10-DET | Chỉ aug (tùy chọn) | ⏳ | | | | | |
+| Magnetic Tile | Gốc / `_bal` | ⏳ | | | | | |
+
 ### 4.6. Cấu trúc slide Thường kỳ
 1. Bài toán, câu hỏi nghiên cứu, định nghĩa "lỗi nhỏ"
 2. Datasets (bảng số ảnh / lớp / split)
-3. Data Analysis (phân bố kích thước; GC10/PKU trước–sau resize)
-4. Augmentation (tham số)
-5. Mô hình + cải tiến nhỏ (sơ đồ P2 / SimAM, có trích dẫn)
-6. Kết quả (bảng 4.5 + biểu đồ AP_small theo mô hình)
-7. Phân tích lỗi (TIDE + ảnh minh họa)
-8. Kế hoạch Giữa kỳ (dựa trên chẩn đoán – Mục 5.1)
+3. Data Analysis (phân bố kích thước; GC10/PKU trước–sau resize; **phân bố lớp – bảng 2.5.2**)
+4. **Xử lý mất cân bằng:** biểu đồ số ảnh/box theo lớp trước–sau; ảnh minh họa bản augment và copy-paste; tham số `t`, `cap`
+5. Augmentation online (tham số mặc định Ultralytics)
+6. Mô hình + cải tiến nhỏ (sơ đồ P2 / SimAM, có trích dẫn)
+7. Kết quả: Bảng A (mô hình) + Bảng B (tác dụng cân bằng) + biểu đồ AP_small theo mô hình
+8. Phân tích lỗi (TIDE + ảnh minh họa)
+9. Kế hoạch Giữa kỳ (dựa trên chẩn đoán – Mục 5.1)
 
 ### 4.7. Kết luận GĐ1 (điền sau)
 - Mô hình chung: ⏳ TBD
 - Loại lỗi chiếm ưu thế theo TIDE: ⏳ TBD
 - P2 có giúp AP_small không? Ở dataset nào? ⏳ TBD
+- Cân bằng bằng tăng cường có tăng AP_rare không? AP_common có giảm không? Augment hay copy-paste đóng góp nhiều hơn? ⏳ TBD
 - → Hướng cải tiến GĐ2: ⏳ TBD (theo bảng quyết định 5.1)
 
 ---
@@ -268,6 +396,7 @@ Thứ tự ưu tiên chạy: YOLO11n → YOLO11n-P2 → Faster R-CNN → RT-DETR
 | Nhầm lớp giữa các lỗi giống nhau, TIDE: **Cls** cao | Backbone chưa đủ phân biệt | **Attention ở backbone:** SimAM, CBAM, Coordinate Attention |
 | Nhiều FP trên nền (vd. ảnh không lỗi), TIDE: **Bkg** cao | Nhiễu kết cấu nền | Attention lọc nền, hard negative, cân bằng lại ảnh nền |
 | P2 giúp nhưng FLOPs tăng quá nhiều | Chi phí nhánh stride 4 | Biến thể **P2–P4 (bỏ P5)** hoặc P2 dùng depthwise conv |
+| **Sau khi đã cân bằng bằng tăng cường (GĐ1)**, AP lớp hiếm vẫn thấp hơn hẳn (và lớp đó có đủ mẫu test để tin được) | Tăng cường chưa đủ / lớp hiếm khó về bản chất | **Class-weighted / focal loss** (Mục 2.5.3c); tăng `t`/`cap`; copy-paste theo mask |
 
 ### 5.2. Ứng viên cải tiến (có trích dẫn)
 
@@ -278,6 +407,9 @@ Thứ tự ưu tiên chạy: YOLO11n → YOLO11n-P2 → Faster R-CNN → RT-DETR
 | Backbone | SPD-Conv | Space-to-depth thay strided conv | Vừa |
 | Loss | NWD | Box ≈ Gaussian, dùng Wasserstein distance | Vừa (sửa loss + assigner) |
 | Loss | Wise-IoU / Inner-IoU | Biến thể IoU | Thấp–vừa (sửa hàm IoU) |
+| Backbone | SE (Squeeze-and-Excitation) | Channel attention (đã thử trong notebook DETR-SE – cần chạy kèm baseline) | Thấp–vừa |
+| Loss | Class-weighted BCE / Focal loss | Xử lý mất cân bằng lớp | Thấp–vừa |
+| Dữ liệu | Class-aware aug + copy-paste | **Đã làm ở GĐ1** – GĐ2 chỉ tinh chỉnh `t`, `cap` nếu cần | – |
 | Neck/Head | P2, P2–P4 | Nhánh độ phân giải cao | Thấp (yaml) |
 
 **Ghi chú cài đặt (kiểm tra lại theo phiên bản `ultralytics` đang dùng):**
@@ -312,6 +444,8 @@ Chạy trên ⏳ TBD bộ dữ liệu (gợi ý: 2 bộ nguồn đại diện �
 
 - Ước lượng: 8 cấu hình × 2 dataset × 3 seed × ~1h ≈ **48 giờ GPU** → vượt 1 tuần quota. ⏳ TBD phương án: (a) chia qua 2 tuần; (b) chỉ chạy A0, A1–A3, A7 đủ 3 seed, còn lại 1 seed; (c) dùng thêm Colab.
 - Báo cáo mean ± std, t-test A_i vs A0 (Mục 3.2).
+- Dữ liệu cho mọi cấu hình A0–A7: `_bal_v1` nếu GĐ1 cho thấy có lợi, ngược lại dùng dữ liệu gốc. ⏳ TBD sau GĐ1.
+- ⏳ TBD: nếu lớp hiếm vẫn thấp sau cân bằng → thêm **A8 = A0 + class-weighted/focal loss**, đánh giá bằng AP_rare + mean ± std trên GC10-DET.
 
 ### 5.5. Bảng kết quả Giữa kỳ (điền sau)
 
@@ -352,6 +486,8 @@ Chạy trên ⏳ TBD bộ dữ liệu (gợi ý: 2 bộ nguồn đại diện �
 
 **Lượng dữ liệu đích:** 10%, 25%, 50%, 100% tập train (lấy mẫu stratified, cố định seed).
 
+**Tỉ lệ ảnh không lỗi trong train đích:** ⏳ TBD thử 1:1, 1:3 và toàn bộ (Mục 2.5.3b). Val/test giữ nguyên tỉ lệ gốc. Khi lấy 10–25% dữ liệu, lấy mẫu **stratified theo có/không lỗi** để không mất hết ảnh lỗi.
+
 **Chiến lược fine-tune:** ⏳ TBD thử (a) fine-tune toàn bộ; (b) đóng băng backbone (`freeze=<số layer backbone>`) vài epoch đầu rồi mở.
 
 **Chỉ số bổ sung cho bài toán thực tế:**
@@ -387,6 +523,12 @@ Chạy trên ⏳ TBD bộ dữ liệu (gợi ý: 2 bộ nguồn đại diện �
 | Cải tiến không giúp | Chênh lệch < std | Báo cáo trung thực; phân tích nguyên nhân – vẫn là kết quả |
 | Dataset tải lỗi / nhãn kém | | Dùng Magnetic Tile thay thế |
 | Không có dữ liệu thật | | Dùng KSDD2 làm đích |
+| Lớp hiếm có quá ít mẫu test | < 10 box test, AP nhảy mạnh giữa seed | Gắn nhãn "không ổn định"; không kết luận riêng cho lớp đó; cân nhắc gộp val+test hoặc cross-validation |
+| Cân bằng lại nhầm cả val/test | Kết quả tốt bất thường | Chỉ sinh dữ liệu cho train; kiểm tra số ảnh val/test không đổi |
+| Copy-paste tạo "dấu vết" giả (mô hình học đường viền dán thay vì lỗi) | QA thấy viền; AP_rare tăng trên train nhưng không tăng trên test | Tăng `margin` hòa trộn; chỉ dán lên nền cùng loại; so với run "chỉ aug" để tách tác dụng |
+| Học thuộc lớp hiếm (quá ít mẫu gốc) | Train loss lớp hiếm rất thấp, test không tăng | Giới hạn `cap` ≤ 4; đa dạng phép biến đổi; không nhân bản y hệt |
+| Cân bằng làm giảm lớp phổ biến | AP_common giảm > 1 điểm | Giảm `t`; giảm số ảnh copy-paste |
+| Rò rỉ theo bo mạch (PKU-PCB) | Kết quả test gần bằng train | Chia theo bo gốc nếu xác định được |
 
 ---
 
@@ -424,6 +566,7 @@ small-defect-detection/
 ├── scripts/
 │   ├── convert_voc.py
 │   ├── convert_mask.py
+│   ├── balance_aug.py              # A.6 + A.7
 │   ├── eda.py
 │   ├── eval_coco.py
 │   └── recall_by_size.py
@@ -443,6 +586,8 @@ small-defect-detection/
 |---|---|---|---|
 | | Chọn YOLO11n làm ứng viên mô hình chung | Nhẹ, nhanh trên T4, dễ sửa, đối chiếu được DAC-YOLO | |
 | | Giữ KSDD2 làm dữ liệu đích, không dùng ở GĐ1–2 | Đảm bảo transfer learning là dữ liệu mới | |
+| 2026-09-27 | **GĐ1 có xử lý mất cân bằng** bằng class-aware augmentation + copy-paste (offline, chỉ train); mọi mô hình dùng chung `_bal_v1`; thêm run đối chứng YOLO11n trên dữ liệu gốc (epoch khớp iteration) | Yêu cầu của nhóm; vẫn đo được tác dụng nhờ đối chứng; so sánh mô hình vẫn công bằng | Vinh |
+| | Không dùng DETR gốc làm baseline chính (giữ RT-DETR) | Notebook DETR-SE: chỉ dùng C5 (stride 32), chưa hội tụ sau 30 epoch, ~4 phút/epoch | |
 | | | | |
 
 ### 11.2. Nhật ký thực nghiệm
@@ -475,6 +620,12 @@ small-defect-detection/
 - Woo et al. (2018) – CBAM; Hou et al. (2021) – Coordinate Attention
 - Tong et al. (2023) – Wise-IoU
 - Bolya et al. (2020) – TIDE: A General Toolbox for Identifying Object Detection Errors
+
+**Mất cân bằng dữ liệu**
+- Gupta, Dollár & Girshick (2019) – LVIS: A Dataset for Large Vocabulary Instance Segmentation (Repeat Factor Sampling)
+- Lin et al. (2017) – Focal Loss for Dense Object Detection
+- Ghiasi et al. (2021) – Simple Copy-Paste is a Strong Data Augmentation Method for Instance Segmentation
+- Hu, Shen & Sun (2018) – Squeeze-and-Excitation Networks
 - Akyon et al. (2022) – SAHI (Slicing Aided Hyper Inference)
 - Li et al. (2027) – DAC-YOLO, *Pattern Recognition* 182 (bài tham chiếu cùng chủ đề)
 - ⏳ Bổ sung các bài YOLO11/YOLOv8 + P2 cho lỗi bề mặt (đường ray, PCB)
@@ -584,3 +735,271 @@ dt = gt.loadRes(f"results/{run}_test/predictions.json")
 E = COCOeval(gt, dt, "bbox"); E.evaluate(); E.accumulate(); E.summarize()
 ```
 > `yolov8-p2.yaml` có sẵn trong Ultralytics. Với YOLO11, nếu phiên bản đang dùng chưa có `yolo11-p2.yaml` thì copy `yolo11.yaml` và thêm nhánh upsample + Detect ở stride 4 (ghi rõ trong báo cáo là cấu hình tự viết).
+
+### A.5. Repeat Factor Sampling – tạo danh sách train có oversample lớp hiếm
+```python
+import math, os
+from collections import Counter
+from pathlib import Path
+
+def repeat_factor_list(train_txt, label_dir, out_dir, t=0.2):
+    """
+    train_txt : file danh sách ảnh train (1 đường dẫn / dòng)
+    label_dir : thư mục nhãn YOLO (<stem>.txt)
+    out_dir   : thư mục chứa ảnh + nhãn đã nhân bản (symlink)
+    t         : ngưỡng tần suất (⏳ thử 0.1–0.3); lớp có f_c < t được lặp nhiều hơn
+    """
+    imgs = [Path(l.strip()) for l in open(train_txt) if l.strip()]
+    cls_per_img = {}
+    for im in imgs:
+        lb = Path(label_dir) / f"{im.stem}.txt"
+        rows = [r.split() for r in lb.read_text().splitlines() if r.strip()] if lb.exists() else []
+        cls_per_img[im] = {int(r[0]) for r in rows}
+    n = len(imgs)
+    freq = Counter(c for cs in cls_per_img.values() for c in cs)          # số ảnh chứa lớp c
+    r_c = {c: max(1.0, math.sqrt(t / (k / n))) for c, k in freq.items()}  # hệ số lặp theo lớp
+
+    out_img, out_lbl = Path(out_dir, "images"), Path(out_dir, "labels")
+    out_img.mkdir(parents=True, exist_ok=True); out_lbl.mkdir(parents=True, exist_ok=True)
+    stats = Counter()
+    for im in imgs:
+        cs = cls_per_img[im]
+        r = max((r_c[c] for c in cs), default=1.0)                        # ảnh nền: 1 lần
+        reps = math.floor(r) + (1 if (r - math.floor(r)) >= 0.5 else 0)  # làm tròn cố định (tái lập)
+        for k in range(max(reps, 1)):
+            suffix = "" if k == 0 else f"_rep{k}"
+            dst_i = out_img / f"{im.stem}{suffix}{im.suffix}"
+            dst_l = out_lbl / f"{im.stem}{suffix}.txt"
+            if not dst_i.exists(): os.symlink(im.resolve(), dst_i)
+            src_l = Path(label_dir) / f"{im.stem}.txt"
+            if src_l.exists() and not dst_l.exists(): os.symlink(src_l.resolve(), dst_l)
+            for c in cs: stats[c] += 1
+    print("Hệ số lặp theo lớp:", {c: round(v, 2) for c, v in sorted(r_c.items())})
+    print("Số ảnh chứa mỗi lớp sau oversample:", dict(sorted(stats.items())))
+    return r_c
+```
+> Chỉ chạy trên **train**. Mỗi bản sao có tên khác (`_rep1`, `_rep2`…) để Ultralytics không gộp trùng; kiểm tra số ảnh train in ra khi bắt đầu train. Nếu Kaggle không cho symlink ra ngoài `/kaggle/working`, dùng `shutil.copy`. Ghi lại `t` và bảng hệ số lặp vào nhật ký thực nghiệm.
+
+### A.6 + A.7. Cân bằng bằng tăng cường: class-aware augmentation + copy-paste (`scripts/balance_aug.py`)
+Chỉ dùng OpenCV + NumPy (có sẵn trên Kaggle). Đã chạy kiểm tra tự động trên dữ liệu giả lập: box đúng vị trí sau lật/xoay (cả ảnh không vuông), lỗi dán giữ nguyên độ tương phản và không lộ viền, kết quả tái lập với cùng seed.
+
+```python
+import math, random
+from collections import Counter
+from pathlib import Path
+import cv2
+import numpy as np
+
+# ---------- I/O nhãn YOLO ----------
+def read_yolo(lbl_path):
+    if not Path(lbl_path).exists():
+        return []
+    out = []
+    for r in Path(lbl_path).read_text().splitlines():
+        p = r.split()
+        if len(p) == 5:
+            out.append([int(p[0])] + [float(v) for v in p[1:]])
+    return out
+
+def yolo_to_xyxy(lbls, W, H):
+    return [[c, (x - w / 2) * W, (y - h / 2) * H, (x + w / 2) * W, (y + h / 2) * H] for c, x, y, w, h in lbls]
+
+def xyxy_to_yolo(boxes, W, H):
+    out = []
+    for c, x1, y1, x2, y2 in boxes:
+        x1, x2 = np.clip([x1, x2], 0, W); y1, y2 = np.clip([y1, y2], 0, H)
+        if x2 - x1 < 1 or y2 - y1 < 1:
+            continue
+        out.append(f"{c} {(x1+x2)/2/W:.6f} {(y1+y2)/2/H:.6f} {(x2-x1)/W:.6f} {(y2-y1)/H:.6f}")
+    return out
+
+# ---------- Hệ số nhân bản theo lớp (Repeat Factor, có giới hạn) ----------
+def class_repeat_factors(label_files, t=0.2, cap=4.0):
+    n = len(label_files)
+    freq = Counter()
+    for lf in label_files:
+        freq.update({b[0] for b in read_yolo(lf)})
+    return {c: min(cap, max(1.0, math.sqrt(t / (k / n)))) for c, k in freq.items()}, freq
+
+# ---------- Phép tăng cường giữ nguyên box (không thu nhỏ ảnh để không làm lỗi nhỏ biến mất) ----------
+def geo_transform(img, boxes, op):
+    H, W = img.shape[:2]
+    out = []
+    if op == "hflip":
+        img = img[:, ::-1]
+        out = [[c, W - x2, y1, W - x1, y2] for c, x1, y1, x2, y2 in boxes]
+    elif op == "vflip":
+        img = img[::-1, :]
+        out = [[c, x1, H - y2, x2, H - y1] for c, x1, y1, x2, y2 in boxes]
+    elif op == "rot90":            # xoay 90° ngược chiều kim đồng hồ
+        img = np.rot90(img, 1)
+        out = [[c, y1, W - x2, y2, W - x1] for c, x1, y1, x2, y2 in boxes]
+    elif op == "rot180":
+        img = img[::-1, ::-1]
+        out = [[c, W - x2, H - y2, W - x1, H - y1] for c, x1, y1, x2, y2 in boxes]
+    else:
+        out = boxes
+    return np.ascontiguousarray(img), out
+
+def photo_transform(img, rng):
+    f = img.astype(np.float32)
+    alpha = rng.uniform(0.8, 1.2)                  # contrast
+    beta = rng.uniform(-20, 20)                    # brightness
+    f = f * alpha + beta
+    if rng.random() < 0.5:                         # gamma
+        g = rng.uniform(0.8, 1.25)
+        f = 255.0 * np.power(np.clip(f, 0, 255) / 255.0, g)
+    if rng.random() < 0.3:                         # nhiễu Gauss nhẹ
+        f = f + rng.normal(0, rng.uniform(2, 6), f.shape)
+    f = np.clip(f, 0, 255).astype(np.uint8)
+    if rng.random() < 0.2:                         # blur rất nhẹ (tránh xóa lỗi nhỏ)
+        f = cv2.GaussianBlur(f, (3, 3), 0)
+    return f
+
+def class_aware_augment(img_paths, label_dir, out_img_dir, out_lbl_dir,
+                        geo_ops=("hflip", "vflip", "rot180"), t=0.2, cap=4.0, seed=42):
+    """
+    Sinh bản tăng cường OFFLINE cho ảnh chứa lớp hiếm (chỉ tập TRAIN).
+    Số bản sinh thêm cho mỗi ảnh = round(max_c r_c) - 1, r_c tính theo repeat factor có trần `cap`.
+    Mỗi bản sinh thêm dùng một phép biến đổi KHÁC nhau (không nhân bản y hệt).
+    """
+    rng = np.random.default_rng(seed)
+    label_files = [Path(label_dir) / f"{Path(p).stem}.txt" for p in img_paths]
+    r_c, freq_before = class_repeat_factors(label_files, t, cap)
+    Path(out_img_dir).mkdir(parents=True, exist_ok=True); Path(out_lbl_dir).mkdir(parents=True, exist_ok=True)
+    added = Counter(); n_new = 0
+    for p, lf in zip(img_paths, label_files):
+        lbls = read_yolo(lf)
+        if not lbls:
+            continue
+        r = max(r_c[c] for c, *_ in lbls)
+        extra = r - 1.0                                   # làm tròn ngẫu nhiên (có seed) để lớp
+        n_extra = int(extra) + int(rng.random() < extra - int(extra))  # mất cân bằng vừa vẫn được tăng
+        if n_extra <= 0:
+            continue
+        img = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
+        H, W = img.shape[:2]
+        boxes = yolo_to_xyxy(lbls, W, H)
+        ops = list(rng.permutation(list(geo_ops)))
+        for k in range(n_extra):
+            op = ops[k % len(ops)]
+            im2, b2 = geo_transform(img, boxes, op)
+            im2 = photo_transform(im2, rng)
+            H2, W2 = im2.shape[:2]
+            stem = f"{Path(p).stem}_aug{k+1}"
+            cv2.imwrite(str(Path(out_img_dir) / f"{stem}{Path(p).suffix}"), im2)
+            (Path(out_lbl_dir) / f"{stem}.txt").write_text("\n".join(xyxy_to_yolo(b2, W2, H2)))
+            added.update(c for c, *_ in lbls); n_new += 1
+    return {"repeat_factor": {c: round(v, 2) for c, v in sorted(r_c.items())},
+            "images_before_per_class": dict(sorted(freq_before.items())),
+            "boxes_added_per_class": dict(sorted(added.items())), "new_images": n_new}
+
+# ---------- Copy-paste lỗi hiếm (chỉ cần nhãn bbox) ----------
+def _feather_mask(h, w, box, margin):
+    """Mặt nạ hòa trộn: =1 trên toàn bộ vùng lỗi, giảm dần về 0 trong phần viền nền."""
+    bx1, by1, bx2, by2 = int(box[0]), int(box[1]), int(math.ceil(box[2])), int(math.ceil(box[3]))
+    if margin <= 0:
+        return np.ones((h, w), np.float32)
+    inside = np.zeros((h, w), np.uint8)
+    inside[by1:by2, bx1:bx2] = 1
+    dist = cv2.distanceTransform(1 - inside, cv2.DIST_L2, 3)   # khoảng cách tới vùng lỗi
+    return np.clip(1.0 - dist / margin, 0.0, 1.0).astype(np.float32)
+
+def _overlap(a, b, gap=4):
+    return not (a[2] + gap <= b[0] or b[2] + gap <= a[0] or a[3] + gap <= b[1] or b[3] + gap <= a[1])
+
+def copy_paste_rare(img_paths, label_dir, out_img_dir, out_lbl_dir, rare_classes,
+                    n_new_images=200, max_paste=3, margin=6, seed=42):
+    """
+    Cắt lỗi thuộc `rare_classes` (kèm viền `margin` px) từ ảnh TRAIN, dán lên ảnh TRAIN khác
+    ở vị trí không chồng lấn box có sẵn, hòa trộn biên mềm + khớp độ sáng trung bình.
+    Không thu nhỏ patch (giữ nguyên kích thước lỗi thật).
+    """
+    rng = random.Random(seed)
+    lf = lambda p: Path(label_dir) / f"{Path(p).stem}.txt"
+    pool = []
+    for p in img_paths:
+        lbls = read_yolo(lf(p))
+        if not any(c in rare_classes for c, *_ in lbls):
+            continue
+        img = cv2.imread(str(p), cv2.IMREAD_UNCHANGED); H, W = img.shape[:2]
+        for c, x1, y1, x2, y2 in yolo_to_xyxy(lbls, W, H):
+            if c not in rare_classes:
+                continue
+            X1, Y1 = int(max(0, x1 - margin)), int(max(0, y1 - margin))
+            X2, Y2 = int(min(W, x2 + margin)), int(min(H, y2 + margin))
+            pool.append((c, img[Y1:Y2, X1:X2].copy(), (x1 - X1, y1 - Y1, x2 - X1, y2 - Y1), Path(p).stem))
+    if not pool:
+        return {"pool": 0, "new_images": 0}
+    Path(out_img_dir).mkdir(parents=True, exist_ok=True); Path(out_lbl_dir).mkdir(parents=True, exist_ok=True)
+    added = Counter(); made = 0
+    for k in range(n_new_images):
+        p = rng.choice(img_paths)
+        img = cv2.imread(str(p), cv2.IMREAD_UNCHANGED).copy(); H, W = img.shape[:2]
+        boxes = yolo_to_xyxy(read_yolo(lf(p)), W, H)
+        pasted = 0
+        for _ in range(rng.randint(1, max_paste)):
+            c, patch, (bx1, by1, bx2, by2), src = rng.choice(pool)
+            if src == Path(p).stem:
+                continue
+            ph, pw = patch.shape[:2]
+            if ph >= H or pw >= W:
+                continue
+            for _try in range(20):
+                ox, oy = rng.randint(0, W - pw), rng.randint(0, H - ph)
+                cand = [ox, oy, ox + pw, oy + ph]
+                if all(not _overlap(cand, b[1:]) for b in boxes):
+                    break
+            else:
+                continue
+            region = img[oy:oy + ph, ox:ox + pw].astype(np.float32)
+            if img.ndim == 3 and patch.ndim == 2:          # đồng bộ số kênh
+                patch = cv2.cvtColor(patch, cv2.COLOR_GRAY2BGR)
+            elif img.ndim == 2 and patch.ndim == 3:
+                patch = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+            pf = patch.astype(np.float32)
+            ring = np.ones((ph, pw), bool)                # viền nền quanh lỗi trong patch
+            ring[int(by1):int(math.ceil(by2)), int(bx1):int(math.ceil(bx2))] = False
+            if ring.any():                                # khớp độ sáng NỀN của patch với vùng đích
+                pf = pf + (region.mean() - pf[ring].mean())
+            m = _feather_mask(ph, pw, (bx1, by1, bx2, by2), margin)
+            if img.ndim == 3:
+                m = m[..., None]
+            img[oy:oy + ph, ox:ox + pw] = np.clip(m * pf + (1 - m) * region, 0, 255).astype(img.dtype)
+            boxes.append([c, ox + bx1, oy + by1, ox + bx2, oy + by2])
+            added[c] += 1; pasted += 1
+        if pasted == 0:
+            continue
+        stem = f"{Path(p).stem}_cp{k}"
+        cv2.imwrite(str(Path(out_img_dir) / f"{stem}{Path(p).suffix}"), img)
+        (Path(out_lbl_dir) / f"{stem}.txt").write_text("\n".join(xyxy_to_yolo(boxes, W, H)))
+        made += 1
+    return {"pool": len(pool), "new_images": made, "boxes_added_per_class": dict(sorted(added.items()))}
+```
+
+**Cách dùng (chạy trong CPU notebook, sau khi đã chia dữ liệu):**
+```python
+from pathlib import Path
+import shutil
+from balance_aug import class_aware_augment, copy_paste_rare
+
+ds = "gc10"
+train_imgs = sorted(Path(f"data/yolo/{ds}/images/train").glob("*.jpg"))
+lbl_dir    = Path(f"data/yolo/{ds}/labels/train")
+out        = Path(f"data/yolo/{ds}_bal_v1")
+
+# 1) Chép nguyên train/val/test gốc sang bản _bal (val/test KHÔNG đổi)
+shutil.copytree(f"data/yolo/{ds}", out, dirs_exist_ok=True)
+
+# 2) Class-aware augmentation (GC10: chỉ lật; ⏳ thêm rot90 sau khi kiểm tra trực quan)
+stats_aug = class_aware_augment(train_imgs, lbl_dir, out/"images/train", out/"labels/train",
+                                geo_ops=("hflip", "vflip"), t=0.2, cap=4.0, seed=42)
+
+# 3) Copy-paste lớp hiếm (danh sách lớp hiếm lấy từ bảng 2.5.2)
+RARE = {...}   # ⏳ vd. id các lớp rolled pit, crease, ...
+stats_cp = copy_paste_rare(train_imgs, lbl_dir, out/"images/train", out/"labels/train",
+                           rare_classes=RARE, n_new_images=300, max_paste=3, margin=6, seed=42)
+print(stats_aug); print(stats_cp)   # ghi vào nhật ký thực nghiệm
+```
+> Điều chỉnh `t`, `cap`, `n_new_images` sao cho tổng ảnh train tăng ≤ 50% và lớp hiếm đạt ≥ 1/3 lớp lớn nhất. Đếm lại phân bố lớp sau khi sinh (dùng lại script EDA) trước khi upload.
+

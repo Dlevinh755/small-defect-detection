@@ -1,10 +1,22 @@
-# Phase 1 (Thường kỳ): baselines + one small improvement (plan §4).
-# Grid = datasets x runs x seeds. Order matters: runs execute top to bottom (plan §4.3 priority).
+# Phase 1 (Thường kỳ): baselines + class-imbalance handling + one small improvement (plan §4, run matrix §4.2).
+# Grid = runs x datasets x seeds, executed top to bottom (priority order of plan §4.3).
+#
+#   data_suffix: appended to each dataset id -> "_bal_v1" = balanced train split (plan §2.5.5), built on demand;
+#                for datasets where balancing is not triggered (mode auto, max/min < 3) it equals the original data.
+#   match_epochs_to: control run on the ORIGINAL data with epochs scaled to the same number of iterations as
+#                training on the balanced set ("{ds}" is replaced by the dataset id). Run name ends with "_itm".
+# Two phase-1 effects are measured independently:
+#   balancing = yolo11n on <ds> (_itm)  vs  yolo11n on <ds>_bal_v1
+#   P2        = yolo11n on <ds>_bal_v1  vs  yolo11n-p2 on <ds>_bal_v1
 phase: p1
 datasets: [neu, gc10, pcb, mt]
 seeds: [0]
 runs:
-  - {model: yolo11n, variant: base}
-  - {model: yolo11n, variant: p2}       # the small improvement (alt: variant simam if backbone is required)
-  - {model: frcnn, variant: base}
-  - {model: rtdetr-l, variant: base}    # heaviest; add epochs: <n> here if quota runs short (record it!)
+  - {model: yolo11n, variant: base, data_suffix: _bal_v1}
+  # control on original data - TBD after EDA: add neu / pcb if their max/min >= 3 (see eda imbalance table)
+  - {model: yolo11n, variant: base, datasets: [gc10, mt], match_epochs_to: "{ds}_bal_v1"}
+  - {model: yolo11n, variant: p2, data_suffix: _bal_v1}     # the small improvement (alt: simam)
+  - {model: frcnn, variant: base, data_suffix: _bal_v1}
+  - {model: rtdetr-l, variant: base, data_suffix: _bal_v1}  # heaviest; add epochs: <n> if quota runs short (record it!)
+  # optional, if quota allows: augmentation only (no copy-paste) -> separates the two balancing techniques
+  - {model: yolo11n, variant: base, datasets: [gc10], data_suffix: _aug_v1}

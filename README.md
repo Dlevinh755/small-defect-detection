@@ -7,7 +7,8 @@ Built to run on **Kaggle T4** (single or T4 x2), resumable across 12-hour sessio
 
 | Phase | What | Grid(s) | `RUN` flag |
 |---|---|---|---|
-| 1 (Thường kỳ) | YOLO11n, Faster R-CNN R50-FPN v2, RT-DETR-l + YOLO11n-P2 on NEU / GC10 / PCB / MT | `p1` | `p1` |
+| data | class-imbalance handling: `<ds>_bal_v1` = class-aware augmentation + copy-paste (train only) | - | `balance` |
+| 1 (Thường kỳ) | YOLO11n, Faster R-CNN R50-FPN v2, RT-DETR-l + YOLO11n-P2 on `<ds>_bal_v1`; YOLO11n on original data (iteration-matched control) | `p1` | `p1` |
 | 2 (Giữa kỳ) | module screening, then ablation A0-A7 x 3 seeds, Welch t-test | `p2_candidates`, `p2_ablation`, `p2_ablation_rest` | `p2_screen`, `p2_ablation` |
 | 2, large images | SAHI-style sliced inference on P1 checkpoints; training on 640 tiles (PCB, GC10) | `p2_tiling` | `p2_tiling` |
 | 3 (Cuối kỳ) | source models on merged data, then T1/T2/T3 x 10-100% x full/freeze on KolektorSDD2 | `p3_source`, `p3_transfer` | `p3` |
@@ -24,7 +25,8 @@ configs/
   experiments/          run grids per phase
 splits/<ds>/            fixed train/val/test id lists (seed 42) - created once, commit them
 src/sdd/
-  data/                 raw readers -> splits -> YOLO + COCO layout; merge (phase 3), subsample, label drawing
+  data/                 raw readers -> splits -> YOLO + COCO layout; balance (imbalance), tiling, merge (phase 3),
+                        subsample (fractions, defect-free ratio), resolve (derived dataset ids), label drawing
   eda/                  EDA tables and figures
   models/               attention / SPD modules, backbone surgery, losses, custom Ultralytics trainer, Faster R-CNN
   engine/               one run end to end (run.py), prediction export, grid runner
@@ -65,7 +67,8 @@ python scripts/train.py --dataset neu --model yolo11n --variant p2 --smoke --dev
 
 ## Runs and results
 
-Run name: `<phase>_<dataset>_<model>_<variant>[_<init>_f<pct>_<finetune>]_s<seed>`, e.g. `p1_neu_yolo11n_p2_s0`,
+Run name: `<phase>_<dataset>_<model>_<variant>[_<init>_f<pct>_<finetune>][_bg<r>][_itm][_sahi]_s<seed>`, e.g.
+`p1_gc10_bal_v1_yolo11n_p2_s0`, `p1_gc10_yolo11n_base_itm_s0`,
 `p3_ksdd2_yolo11n_A7_T3_f025_freeze_s1`. Each run directory (`results/runs/<name>/`) holds `config.yaml`
 (spec, resolved variant, protocol, library versions), the framework training output, `test_predictions.json`,
 `metrics.json` and `done.json`. `scripts/make_report.py` rebuilds `results/master_results.csv` (one row per run)
@@ -81,6 +84,20 @@ Main metrics (test split, once, checkpoint chosen on val):
 - image level (phase 3): detection rate, false-alarm rate on defect-free images, image AUROC / AP
 
 ## Implementation notes
+
+- **Class imbalance (plan §2.5).** Splits are stratified by the rarest class in each image (optional `group_regex`
+  for board-level splits). `<ds>_bal_v1` is built on demand from `<ds>`: images with rare classes get
+  `round(max r_c) - 1` extra copies (`r_c = min(cap, max(1, sqrt(t / f_c)))`), each with a different flip / rotation
+  + photometric change, then rare defects are copy-pasted (native size, feathered background ring, brightness
+  matched, no overlap) until they reach 1/3 of the largest class; at most +50% train images, seed 42, val/test are
+  the source dataset's files. `_aug_v1` (augmentation only) and `_rfs_v1` (identical repeats) exist for ablation.
+  Knobs: `protocol.yaml -> balance`, per dataset `datasets.yaml -> balance` (mode `"auto"` balances only when
+  max/min >= 3). `prepare_data.py --balance` writes before/after counts and QA grids to `figures/balance/`.
+  Every run reports `AP_rare` / `AP_common` (rare = < 1/3 of the largest class in the original train split),
+  per-class AP with test-box counts (`unstable_classes` < 10 test boxes); the phase-1 control run uses the original
+  data with epochs scaled by `|train_bal| / |train|` (`match_epochs_to`, run name `..._itm_...`). Loss-level
+  options for phase 2: variants `clsw` (Ultralytics `cls_pw`, 1/sqrt(freq)) and `focal`. Phase 3: `bg_ratios`
+  (defect-free : defective train images) in `p3_transfer.yaml`.
 
 - **Ultralytics is not forked.** `sdd.models.yolo_trainer.make_trainer(variant)` returns a `DetectionTrainer`
   subclass whose `get_model` builds the yaml, loads COCO weights, then edits the built network

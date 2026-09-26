@@ -2,6 +2,8 @@
 # Budget option (b): run A0, A1-A3, A7 with 3 seeds first (this file), then p2_ablation_rest.yaml.
 phase: p2
 datasets: [neu, gc10]
+# Train data: balanced split if phase 1 showed balancing helps (plan §5.4). TBD after phase 1: "" = original data.
+data_suffix: _bal_v1
 seeds: [0, 1, 2]
 runs:
   - {model: yolo11n, variant: A0}

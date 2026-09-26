@@ -4,6 +4,9 @@ phase: p3
 datasets: [ksdd2]
 seeds: [0, 1, 2]
 fractions: [0.1, 0.25, 0.5, 1.0]     # of the target train split, stratified defect/clean, fixed seed
+# defect-free : defective images in the target TRAIN split (plan §2.5.3b, §6.2); null = keep all of them.
+# TBD: try [1, 3, null] on one init first (it multiplies the grid).
+bg_ratios: [null]
 finetune: [full, freeze]             # freeze = backbone frozen for `freeze_epochs`, then everything trained
 freeze_layers: 11                    # YOLO11 backbone = layers 0-10
 freeze_epochs: 10

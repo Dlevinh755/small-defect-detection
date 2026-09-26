@@ -26,6 +26,11 @@ def main():
         print(json.dumps(rows[-1], indent=2))
         print(pd.read_csv(out / "rel_bin_candidates.csv").to_string(index=False))
     pd.DataFrame(rows).to_csv(paths().results / "eda" / "datasets_summary.csv", index=False)
+    # plan table 2.5.2 (class imbalance), one row per dataset
+    imb = pd.DataFrame([json.loads((paths().results / "eda" / ds / "imbalance.json").read_text()) for ds in a.datasets])
+    from sdd.reporting.tables import save_table
+    save_table(imb, paths().results / "tables", "imbalance_2_5_2")
+    print(imb.to_string(index=False))
 
 
 if __name__ == "__main__":

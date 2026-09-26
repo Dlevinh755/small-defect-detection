@@ -17,6 +17,7 @@ os.environ["SDD_RESULTS"] = str(_TMP / "results")
 os.environ["SDD_SPLITS"] = str(_TMP / "splits")
 os.environ["SDD_RAW_NEU"] = str(_TMP / "raw" / "neu")
 os.environ["SDD_RAW_KSDD2"] = str(_TMP / "raw" / "ksdd2")
+os.environ["SDD_RAW_GC10"] = str(_TMP / "raw" / "gc10")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import cv2  # noqa: E402
@@ -72,8 +73,33 @@ def make_ksdd2(root: Path, n_train: int = 12, n_test: int = 6, seed: int = 0):
             cv2.imwrite(str(d / f"{split}{i:04d}_GT.png"), mask)
 
 
+GC10_COUNTS = {"1_chongkong": 24, "2_hanfeng": 12, "3_yueyawan": 5, "4_shuiban": 3}  # imbalanced on purpose
+
+
+def make_gc10(root: Path, seed: int = 0):
+    """Imbalanced VOC dataset with GC10 raw class names, non-square 400x300 textured images, small defects."""
+    rng = np.random.default_rng(seed)
+    (root / "lable").mkdir(parents=True, exist_ok=True)
+    k = 0
+    for ci, (name, n) in enumerate(GC10_COUNTS.items()):
+        for _ in range(n):
+            img = rng.integers(90, 140, (300, 400, 3), dtype=np.uint8)
+            objs = []
+            for _ in range(int(rng.integers(1, 3))):
+                w, h = int(rng.integers(8, 30)), int(rng.integers(8, 30))
+                x, y = int(rng.integers(1, 400 - w)), int(rng.integers(1, 300 - h))
+                cv2.rectangle(img, (x, y), (x + w - 1, y + h - 1), (20 + 50 * ci, 230, 40), -1)
+                objs.append((name, (x + 1, y + 1, x + w, y + h)))
+            k += 1
+            d = root / str(ci + 1)
+            d.mkdir(exist_ok=True)
+            cv2.imwrite(str(d / f"img_{k:03d}.jpg"), img)
+            _voc(root / "lable" / f"img_{k:03d}.xml", 400, 300, objs)
+
+
 @pytest.fixture(scope="session")
 def raw_data():
     make_neu(Path(os.environ["SDD_RAW_NEU"]))
     make_ksdd2(Path(os.environ["SDD_RAW_KSDD2"]))
+    make_gc10(Path(os.environ["SDD_RAW_GC10"]))
     return _TMP

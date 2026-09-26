@@ -13,20 +13,38 @@ PCT = ["AP", "AP50", "AP75", "AP_s", "AP_m", "AP_l", "AP75_s", "AP_rel_small", "
        "R_small", "P", "R", "img_detection_rate", "false_alarm_rate", "img_AP"]
 
 
-def model_label(model: str, variant: str, infer: str | None = None, train_tile=None) -> str:
-    s = model if variant in ("base", None) or pd.isna(variant) else f"{model}-{variant}"
-    if train_tile is not None and not pd.isna(train_tile):
+def _na(v) -> bool:
+    return v is None or (isinstance(v, float) and np.isnan(v))
+
+
+def model_label(model: str, variant: str, infer: str | None = None, train_tile=None, data=None,
+                matched=None) -> str:
+    """e.g. "yolo11n-p2", "yolo11n [orig, iter-matched]", "yolo11n (tiles 640) +SAHI".
+    ``data`` is shown only when it differs from the phase's main data version (set to None by the caller)."""
+    s = model if _na(variant) or variant == "base" else f"{model}-{variant}"
+    if not _na(data):
+        s += f" [{data}{', iter-matched' if not _na(matched) and matched else ''}]"
+    if not _na(train_tile):
         s += f" (tiles {int(train_tile)})"
     if infer == "sliced":
         s += " +SAHI"
     return s
 
 
+def main_data_version(df: pd.DataFrame) -> str | None:
+    """Most common data version of a set of runs (e.g. 'bal_v1' in phase 1)."""
+    return df["data_version"].mode().iloc[0] if "data_version" in df and df["data_version"].notna().any() else None
+
+
 def with_labels(df: pd.DataFrame) -> pd.DataFrame:
-    """Add ``Model`` and group tiled datasets (pcb_t640) under the dataset they are evaluated on (pcb)."""
+    """Add ``Model`` and group derived datasets (gc10_bal_v1, pcb_t640) under the dataset they are evaluated on.
+    Runs on a data version other than the main one of their phase are tagged, e.g. "[orig, iter-matched]"."""
     d = df.copy()
     get = lambda c: d[c] if c in d else pd.Series([None] * len(d), index=d.index)  # noqa: E731
-    d["Model"] = [model_label(m, v, i, t) for m, v, i, t in zip(d.model, d.variant, get("infer"), get("train_tile"))]
+    main = {ph: main_data_version(g) for ph, g in d.groupby("phase")} if "phase" in d else {}
+    data = [None if _na(v) or v == main.get(ph) else v for v, ph in zip(get("data_version"), get("phase"))]
+    d["Model"] = [model_label(m, v, i, t, dv, mt) for m, v, i, t, dv, mt in
+                  zip(d.model, d.variant, get("infer"), get("train_tile"), data, get("match_epochs_to"))]
     if "eval_dataset" in d:
         d["dataset"] = d["eval_dataset"].fillna(d["dataset"])
     return d
@@ -52,8 +70,12 @@ def save_table(df: pd.DataFrame, out: Path, name: str) -> None:
     (out / f"{name}.tex").write_text(df.to_latex(index=False, escape=True), encoding="utf-8")
 
 
-def table_phase1(df: pd.DataFrame, phase: str = "p1") -> pd.DataFrame:
-    d = with_labels(df[df.phase == phase])
+def table_phase1(df: pd.DataFrame, phase: str = "p1", main_data_only: bool = False) -> pd.DataFrame:
+    """Plan §4.5 table A. ``main_data_only`` drops control runs (e.g. original-data runs in a _bal_v1 phase)."""
+    d = df[df.phase == phase]
+    if main_data_only and main_data_version(d):
+        d = d[d.data_version == main_data_version(d)]
+    d = with_labels(d)
     metrics = ["AP", "AP50", "AP75", "AP_s", "AP_m", "AP_l", "AP_rel_small", "R_rel_small", "params_M", "GFLOPs",
                "fps_fp16", "e2e_sliced_total_ms"]  # sliced runs: FPS is per 640 forward, see the ms/img column
     metrics = [m for m in metrics if m in d]
@@ -97,3 +119,44 @@ def table_transfer(df: pd.DataFrame, phase: str = "p3") -> pd.DataFrame:
     for m in metrics:
         out[m] = [_pm(a, b) for a, b in zip(ms[f"{m}_mean"], ms[f"{m}_std"])]
     return out.sort_values(["dataset", "finetune", "fraction", "init"])
+
+
+def table_balance(df: pd.DataFrame, phase: str = "p1", model: str = "yolo11n") -> pd.DataFrame:
+    """Plan §4.5 table B: effect of the imbalance handling for the base model (original vs _aug vs _bal)."""
+    d = df[(df.phase == phase) & (df.model == model) & (df.variant == "base")]
+    if "data_version" not in d or d.data_version.nunique() < 2:
+        return pd.DataFrame()
+    d = with_labels(d)
+    d = d[d.dataset.isin(d[d.data_version == "orig"].dataset)]  # datasets that have a control run
+    rows = []
+    for (ds, dv), g in d.groupby(["dataset", "data_version"], sort=True):
+        r = g.iloc[0]
+        rare = [c for c in str(r.get("rare_classes", "")).split(";") if c]
+        per_rare = ", ".join(f"{c} {_fmt(g[f'AP_cls/{c}'].mean(), True)}" for c in rare if f"AP_cls/{c}" in g)
+        rows.append({
+            "Dataset": ds,
+            "Data": dv + (" (iter-matched)" if not _na(r.get("match_epochs_to")) else ""),
+            "train images": int(r.get("n_train_images", 0) or 0),
+            **{m: _fmt(g[m].mean(), True) for m in ("AP", "AP_rare", "AP_common", "R_rel_small") if m in g},
+            "AP of rare classes": per_rare or "-",
+        })
+    return pd.DataFrame(rows)
+
+
+def table_per_class(df: pd.DataFrame, phase: str, dataset: str) -> pd.DataFrame:
+    """Per-class AP of every model with the number of test boxes (plan §2.5.3d); rare / unstable classes flagged."""
+    d = with_labels(df[df.phase == phase])
+    d = d[d.dataset == dataset]
+    if d.empty:
+        return pd.DataFrame()
+    classes = [c.split("/", 1)[1] for c in d.columns if c.startswith("n_test_cls/")]
+    r0 = d.iloc[0]
+    rare = set(str(r0.get("rare_classes", "")).split(";"))
+    unstable = set(str(r0.get("unstable_classes", "")).split(";"))
+    out = pd.DataFrame({"class": classes,
+                        "test boxes": [int(r0[f"n_test_cls/{c}"]) for c in classes],
+                        "flag": ["rare" * (c in rare) + (", " if c in rare and c in unstable else "")
+                                 + "unstable" * (c in unstable) for c in classes]})
+    for model, g in d.groupby("Model", sort=False):
+        out[model] = [_fmt(g[f"AP_cls/{c}"].mean(), True) if f"AP_cls/{c}" in g else "-" for c in classes]
+    return out

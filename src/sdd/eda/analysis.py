@@ -75,6 +75,46 @@ def summary(b: pd.DataFrame, img: pd.DataFrame, dataset: str) -> dict:
     return out
 
 
+def per_class_split(b: pd.DataFrame, names: list[str]) -> pd.DataFrame:
+    """Images and boxes per class on every split (plan §2.4)."""
+    boxes = pd.crosstab(b["class"], b.split).reindex(index=names, columns=list(SPLITS), fill_value=0)
+    imgs = (b.drop_duplicates(["split", "uid", "class"]).pipe(lambda x: pd.crosstab(x["class"], x.split))
+            .reindex(index=names, columns=list(SPLITS), fill_value=0))
+    out = pd.concat({"boxes": boxes, "images": imgs}, axis=1)
+    out.columns = [f"{a}_{c}" for a, c in out.columns]
+    return out
+
+
+def severity(ratio: float) -> str:
+    """Plan §2.5.2 convention: max/min < 3 light, 3-10 moderate, > 10 severe."""
+    if np.isnan(ratio):
+        return "-"
+    return "light" if ratio < 3 else "moderate" if ratio <= 10 else "severe"
+
+
+def imbalance_row(data_dir: Path, b: pd.DataFrame, img: pd.DataFrame, dataset: str) -> dict:
+    """One row of plan table 2.5.2, from the ORIGINAL train split (+ test box count of the smallest class)."""
+    from ..config import protocol
+    from ..data.balance import imbalance_summary
+    from ..data.build import samples_from_coco
+
+    names = class_names(data_dir)
+    s = imbalance_summary(samples_from_coco(data_dir, "train"), names, protocol()["balance"]["rare_ratio"])
+    test_boxes = b[b.split == "test"]["class"].value_counts()
+    bx = s["boxes_per_class"]
+    n_clean, n_def = int((img.n_boxes == 0).sum()), int((img.n_boxes > 0).sum())
+    return {
+        "dataset": dataset,
+        "largest class (train boxes)": f"{s['max_class']} ({bx[s['max_class']]})",
+        "smallest class (train boxes)": f"{s['min_class']} ({bx[s['min_class']]})" if s["min_class"] else "-",
+        "max/min": round(s["max_min_ratio"], 2),
+        "defect : clean images": f"1 : {n_clean / n_def:.2f}" if n_clean else "defect images only",
+        "test boxes of smallest class": int(test_boxes.get(s["min_class"], 0)) if s["min_class"] else 0,
+        "severity": severity(s["max_min_ratio"]),
+        "rare classes": ", ".join(s["rare_classes"]) or "-",
+    }
+
+
 def suggest_rel_bins(b: pd.DataFrame, candidates=None, split: str = "test") -> pd.DataFrame:
     """Test-set box counts per group for candidate relative bins (choose one with >= ~50 boxes/group)."""
     candidates = candidates or [
@@ -199,6 +239,10 @@ def run_eda(data_dir: Path, out_dir: Path, dataset: str) -> dict:
     s = summary(b, img, dataset)
     (out_dir / "summary.json").write_text(json.dumps(s, indent=2))
     suggest_rel_bins(b).to_csv(out_dir / "rel_bin_candidates.csv", index=False)
+    per_class_split(b, names).to_csv(out_dir / "per_class_split.csv")
+    imb = imbalance_row(data_dir, b, img, dataset)
+    (out_dir / "imbalance.json").write_text(json.dumps(imb, indent=2))
+    s.update({f"imbalance:{k}": v for k, v in imb.items() if k != "dataset"})
     per_class = b.groupby("class").agg(boxes=("area", "size"), area_median=("area", "median"),
                                        rel_area_median=("rel_area", "median"), aspect_median=("aspect", "median"))
     per_class.to_csv(out_dir / "per_class.csv")

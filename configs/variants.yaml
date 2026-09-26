@@ -11,6 +11,8 @@
 #   nwd_C:      NWD normalising constant in PIXELS at 640 input (paper: 12.8 for AI-TOD; TBD: ~mean small-box size from EDA)
 #   assigner_nwd: also blend NWD into the TaskAlignedAssigner metric (record in report: "loss + assigner" vs "loss only")
 #   inner_ratio: Inner-IoU auxiliary box scale (<1 helps high-IoU samples, paper 0.7-0.8)
+#   cls_loss:   bce | focal (focal_gamma, focal_alpha)   -> class imbalance at loss level (plan §2.5.3c)
+#   train_args: extra Ultralytics train arguments, e.g. {cls_pw: 0.5} = class-weighted BCE with 1/sqrt(freq)
 #   inherit:    list of variants merged left-to-right before this entry's own keys
 
 variants:
@@ -40,6 +42,10 @@ variants:
   wiou: {inherit: [base], loss: wiou}
   inner: {inherit: [base], loss: inner_ciou, inner_ratio: 0.75}
 
+  # ---------- class imbalance at loss level (plan §2.5.3c; phase 2 only if rare classes stay low) ----------
+  clsw: {inherit: [base], train_args: {cls_pw: 0.5}}
+  focal: {inherit: [base], cls_loss: focal, focal_gamma: 1.5, focal_alpha: 0.25}
+
   # ---------- phase-2 ablation (plan §5.4) ----------
   # TBD after phase 1: swap the backbone / loss entries below for the ones the diagnosis points to (plan §5.1).
   A0: {inherit: [base]}
@@ -50,3 +56,4 @@ variants:
   A5: {inherit: [p2, nwd]}
   A6: {inherit: [simam, nwd]}
   A7: {inherit: [p2, simam, nwd]}
+  A8: {inherit: [clsw]}          # TBD after phase 1 (plan §5.4): A0 + class-weighted (or focal) loss

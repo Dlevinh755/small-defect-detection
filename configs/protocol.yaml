@@ -41,6 +41,36 @@ eval:
   rel_names: [rel_small, rel_medium, rel_large]
   tide: true
 
+# Class-imbalance handling (plan §2.5). Offline, TRAIN split only, seed-fixed; val/test are never touched.
+# Dataset ids built on demand from <ds>:
+#   <ds>_bal_v1  class-aware augmentation + copy-paste of rare defects (main phase-1 data, §2.5.5)
+#   <ds>_aug_v1  class-aware augmentation only (optional ablation: aug vs copy-paste)
+#   <ds>_rfs_v1  plain repeat-factor sampling, identical copies (fallback, Appendix A.5)
+# Per-dataset switches (geometric ops, copy-paste on/off) live in datasets.yaml -> balance.
+# Bump the version suffix (v2, ...) whenever these values change, so old runs stay traceable.
+balance:
+  seed: 42
+  t: 0.2                    # repeat-factor threshold: r_c = min(cap, max(1, sqrt(t / f_c))), f_c = image share of c
+  cap: 4.0
+  max_increase: 0.5         # generated images <= 50% of the original train images
+  rare_ratio: 0.333         # rare class: < rare_ratio x boxes of the largest class (original train)
+  target_ratio: 0.333       # copy-paste fills rare classes up to this x images of the largest class
+  imbalance_threshold: 3.0  # mode "auto": balance only if max/min boxes per class >= this
+  unstable_test_boxes: 10   # per-class AP flagged "unstable" below this many test boxes
+  copy_paste:
+    margin: 6               # background ring (px) around a pasted defect, feathered into the target
+    max_paste: 3            # defects pasted per generated image
+    max_rel_area: 0.25      # never paste defects covering > 25% of the image (e.g. NEU crazing)
+    gap: 4                  # min px between a pasted box and existing boxes
+  photometric:              # applied to every generated image (plan §2.5.5)
+    contrast: [0.8, 1.2]
+    brightness: 20
+    gamma: [0.8, 1.25]
+    p_gamma: 0.5
+    noise_sigma: [2, 6]
+    p_noise: 0.3
+    p_blur: 0.2
+
 # Tiling (training data) and sliced inference (SAHI-style, Akyon et al. 2022) for large images (plan §5.1).
 # A dataset id "<ds>_t<size>" (e.g. pcb_t640) is built automatically from <ds>: train/val are cut into tiles,
 # test stays the ORIGINAL full images, so tiled runs are scored on the same test set as everything else.

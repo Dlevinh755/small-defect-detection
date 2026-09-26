@@ -1,6 +1,8 @@
 # Phase 2 screening: each candidate module alone, 1 seed, to pick what goes into A2/A3 (plan §5.2).
 phase: p2s
 datasets: [neu, gc10]
+# Train data: balanced split if phase 1 showed balancing helps (plan §5.4). TBD after phase 1: "" = original data.
+data_suffix: _bal_v1
 seeds: [0]
 runs:
   - {model: yolo11n, variant: p2p4}
@@ -12,3 +14,6 @@ runs:
   - {model: yolo11n, variant: nwd_assign}
   - {model: yolo11n, variant: wiou}
   - {model: yolo11n, variant: inner}
+  # class imbalance at loss level (plan §2.5.3c) - only meaningful if rare classes stay low after balancing
+  - {model: yolo11n, variant: clsw}
+  - {model: yolo11n, variant: focal}

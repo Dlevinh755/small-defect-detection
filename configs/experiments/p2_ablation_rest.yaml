@@ -1,5 +1,7 @@
 phase: p2
 datasets: [neu, gc10]
+# Train data: balanced split if phase 1 showed balancing helps (plan §5.4). TBD after phase 1: "" = original data.
+data_suffix: _bal_v1
 seeds: [0]
 runs:
   - {model: yolo11n, variant: A4}

@@ -89,7 +89,8 @@ def tile_dataset(base: str, size: int, force: bool = False) -> Path:
     if out.exists():
         shutil.rmtree(out)
     cfg = protocol()["tiling"]
-    src_dir = build_dataset(base)  # no-op when already built
+    built = paths().data_dir(base)  # may itself be derived (e.g. pcb_bal_v1), built by sdd.data.resolve
+    src_dir = built if (built / "meta.json").exists() else build_dataset(base)
     names = class_names(src_dir)
     rng = random.Random(0)
     stats = {}

@@ -11,7 +11,8 @@ from sdd.models.losses import wasserstein_similarity
 from sdd.models.modules import AttnWrap, SPDConv
 from sdd.models.yolo_trainer import build_yolo
 
-VARIANTS = ["base", "p2", "p2p4", "simam", "cbam", "ca", "spd", "nwd", "nwd_assign", "wiou", "inner", "A7"]
+VARIANTS = ["base", "p2", "p2p4", "simam", "cbam", "ca", "spd", "nwd", "nwd_assign", "wiou", "inner", "focal",
+            "clsw", "A7"]
 
 
 def _batch():

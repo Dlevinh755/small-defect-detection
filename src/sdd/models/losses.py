@@ -8,6 +8,12 @@ pixel constant.
 * ``nwd``         (1 - r) * L_CIoU + r * (1 - NWD)                           Wang et al. 2021
 * ``wiou``        Wise-IoU v3 (dynamic non-monotonic focusing)               Tong et al. 2023
 * ``inner_ciou``  L_CIoU + IoU - IoU_inner (auxiliary boxes scaled by ratio)  Zhang et al. 2023
+
+Classification (class imbalance, plan §2.5.3c):
+
+* ``cls_loss: focal``  element-wise focal BCE (Lin et al. 2017) replacing the BCE of ``v8DetectionLoss``
+* class-weighted BCE needs no patch: Ultralytics 8.4 applies inverse-frequency weights when the train argument
+  ``cls_pw`` > 0 (1 = 1/freq, 0.5 = 1/sqrt(freq)); variants pass it through ``train_args``.
 """
 
 from __future__ import annotations
@@ -77,6 +83,23 @@ class SDDBboxLoss(BboxLoss):
         return ((focus * r_wiou * l_iou) * weight).sum() / target_scores_sum, loss_dfl
 
 
+class FocalBCE(torch.nn.Module):
+    """Element-wise focal BCE with logits; works with Ultralytics' soft (IoU-aware) targets."""
+
+    def __init__(self, gamma: float = 1.5, alpha: float = 0.25):
+        super().__init__()
+        self.gamma, self.alpha = gamma, alpha
+
+    def forward(self, pred: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(pred, label, reduction="none")
+        p = pred.sigmoid()
+        p_t = label * p + (1 - label) * (1 - p)
+        loss = loss * (1.0 - p_t) ** self.gamma
+        if self.alpha > 0:
+            loss = loss * (label * self.alpha + (1 - label) * (1 - self.alpha))
+        return loss
+
+
 class NWDTaskAlignedAssigner(TaskAlignedAssigner):
     """Assigner whose alignment metric uses (1 - r) * CIoU + r * NWD (inputs are already in pixels here)."""
 
@@ -97,6 +120,8 @@ def patch_criterion(crit, cfg: dict):
             crit.reg_max, loss, nwd_ratio=cfg.get("nwd_ratio", 0.5), nwd_C=cfg.get("nwd_C", 12.8),
             inner_ratio=cfg.get("inner_ratio", 0.75),
         ).to(crit.device)
+    if cfg.get("cls_loss", "bce") == "focal":
+        crit.bce = FocalBCE(cfg.get("focal_gamma", 1.5), cfg.get("focal_alpha", 0.25))
     if cfg.get("assigner_nwd"):
         crit.assigner.__class__ = NWDTaskAlignedAssigner
         crit.assigner.nwd_ratio = cfg.get("nwd_ratio", 0.5)

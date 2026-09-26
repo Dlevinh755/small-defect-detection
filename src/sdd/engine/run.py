@@ -20,10 +20,11 @@ from pathlib import Path
 
 import torch
 
-from ..config import datasets_cfg, model_family, protocol, save_yaml, variant_cfg
-from ..data.build import build_dataset, load_coco_json
+from ..config import model_family, protocol, save_yaml, variant_cfg
+from ..data.build import load_coco_json
+from ..data.resolve import base_dataset, data_version, ensure_dataset
 from ..data.subsample import fraction_data_yaml, fraction_tag
-from ..data.tiling import parse_tiled, tile_dataset
+from ..data.tiling import parse_tiled
 from ..env import check_ultralytics_version, paths, versions, weight_path
 
 log = logging.getLogger(__name__)
@@ -42,12 +43,16 @@ class RunSpec:
     init: str | None = None          # label, e.g. T1 / T2 / T3
     init_from: str | None = None     # "coco" or the run name whose best.pt initialises this run
     fraction: float = 1.0            # of the train split
+    bg_ratio: float | None = None    # defect-free : defective train images (None = keep all), plan §6.2
     finetune: str = "full"           # full | freeze
     freeze_layers: int = 11
     freeze_epochs: int = 10
     # large images (plan §5.1)
     infer: str = "full"              # full | sliced (SAHI-style tiles + full image, merged by NMS)
     reuse_phase: str | None = None   # evaluate the checkpoint of the same run from this phase (no training)
+    # class imbalance (plan §2.5.5): control run on original data with epochs scaled so the number of iterations
+    # matches training on this (balanced) dataset, e.g. "gc10_bal_v1"
+    match_epochs_to: str | None = None
     smoke: bool = False
     extra: dict = field(default_factory=dict)  # extra Ultralytics train kwargs (recorded)
 
@@ -56,6 +61,10 @@ class RunSpec:
         n = f"{self.phase}_{self.dataset}_{self.model}_{self.variant}"
         if self.init:
             n += f"_{self.init}_{fraction_tag(self.fraction)}_{self.finetune}"
+        if self.bg_ratio is not None:
+            n += f"_bg{self.bg_ratio:g}"
+        if self.match_epochs_to:
+            n += "_itm"  # iteration-matched control
         if self.infer == "sliced":
             n += "_sahi"
         n += f"_s{self.seed}"
@@ -73,22 +82,18 @@ def _devices(device: str) -> tuple[str, str]:
     return str(device), f"cuda:{device}"
 
 
-def _ensure_data(spec: RunSpec) -> Path:
-    d = paths().data_dir(spec.dataset)
-    if spec.dataset in datasets_cfg()["datasets"]:
-        return build_dataset(spec.dataset)
-    tiled = parse_tiled(spec.dataset)
-    if tiled and tiled[0] in datasets_cfg()["datasets"]:
-        return tile_dataset(*tiled)
-    if not (d / "meta.json").exists():
-        raise FileNotFoundError(f"{d} not built (merged datasets: scripts/prepare_data.py --merge ...)")
-    return d
+def _n_train(dataset: str) -> int:
+    return json.loads((ensure_dataset(dataset) / "meta.json").read_text())["split_sizes"]["train"]
 
 
 def _train_params(spec: RunSpec) -> dict:
     fam = dict(protocol()["families"][model_family(spec.model)])
     if spec.epochs:
         fam["epochs"] = spec.epochs
+    if spec.match_epochs_to:  # same number of optimisation steps as training on the larger balanced dataset
+        ratio = _n_train(spec.match_epochs_to) / _n_train(spec.dataset)
+        fam["epochs"] = max(1, round(fam["epochs"] * ratio))
+        fam["epochs_matched_to"] = {"dataset": spec.match_epochs_to, "ratio": round(ratio, 4)}
     if spec.batch:
         fam["batch"] = spec.batch
     if spec.smoke:
@@ -125,6 +130,7 @@ def _train_ultralytics(spec: RunSpec, rd: Path, data_yaml: Path, fam: dict, devi
                   amp=protocol()["amp"], device=device, project=str(rd), exist_ok=True, plots=True, verbose=False)
     if spec.smoke:
         common["fraction"] = protocol()["smoke"]["fraction"]
+    common.update(variant.get("train_args", {}))  # e.g. cls_pw for class-weighted BCE
     common.update(spec.extra)
     trainer = yt.make_trainer(variant) if family == "yolo" else None
     cls = RTDETR if family == "rtdetr" else YOLO
@@ -173,6 +179,7 @@ def evaluate_run(spec: RunSpec, weights: Path, data_dir: Path, rd: Path, device:
     from ..evaluation.coco_eval import coco_metrics
     from ..evaluation.efficiency import benchmark_module
     from ..evaluation.image_level import image_level_metrics
+    from ..evaluation.imbalance import imbalance_metrics
     from ..evaluation.matching import dets_by_image, gt_from_coco, operating_point_metrics
     from ..evaluation.tide_eval import tide_errors
     from .predict import predict_frcnn_split, predict_ultralytics, predict_ultralytics_sliced
@@ -199,6 +206,7 @@ def evaluate_run(spec: RunSpec, weights: Path, data_dir: Path, rd: Path, device:
     (rd / "test_predictions.json").write_text(json.dumps(dets))
 
     m = coco_metrics(gt, dets)
+    m.update(imbalance_metrics(m, gt, base_dataset(spec.dataset)))
     G, D = gt_from_coco(gt), dets_by_image(dets, [im["id"] for im in gt["images"]])
     m.update(operating_point_metrics(G, D, ev["match_iou"], ev["op_conf"]))
     m.update(image_level_metrics(G, D, ev["match_iou"], ev["op_conf"]))
@@ -232,8 +240,8 @@ def run(spec: RunSpec, device: str = "0", force: bool = False) -> dict:
         raise ValueError(f"{spec.model} only supports variant 'base'")
     if family != "frcnn":
         check_ultralytics_version()
-    data_dir = _ensure_data(spec)
-    data_yaml = fraction_data_yaml(data_dir, spec.fraction, spec.seed)
+    data_dir = ensure_dataset(spec.dataset)
+    data_yaml = fraction_data_yaml(data_dir, spec.fraction, spec.seed, spec.bg_ratio)
     fam = _train_params(spec)
     save_yaml({"spec": asdict(spec), "run": spec.name, "train_params": fam,
                "variant": variant_cfg(spec.variant) if family == "yolo" else None,
@@ -265,7 +273,8 @@ def run(spec: RunSpec, device: str = "0", force: bool = False) -> dict:
     trained_in = paths().run_dir(spec.reuse_source()) if spec.reuse_phase else rd
     tiled = parse_tiled(spec.dataset)
     metrics = {"run": spec.name, **{k: v for k, v in asdict(spec).items() if k != "extra"},
-               "eval_dataset": tiled[0] if tiled else spec.dataset, "train_tile": tiled[1] if tiled else None,
+               "eval_dataset": base_dataset(spec.dataset), "data_version": data_version(spec.dataset),
+               "train_tile": tiled[1] if tiled else None, "n_train_images": _n_train(spec.dataset),
                "epochs_run": fam["epochs"], "batch_run": fam["batch"], "train_hours": train_hours(trained_in),
                "train_hours_this_session": round(train_h, 3),
                "weights": str(weights), **versions()}

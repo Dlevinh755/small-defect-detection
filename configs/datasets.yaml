@@ -2,10 +2,17 @@
 #
 # reader:      voc | ksdd2 | magnetic_tile   (see src/sdd/data/readers.py)
 # classes:     final class order (YOLO id = index). Raw names are mapped with class_map (case-insensitive).
-# split:       ratios for train/val/test (stratified, seed 42) or "official" (dataset ships train/test; val carved from train)
+# split:       ratios for train/val/test, stratified by the RAREST class present in each image (seed 42),
+#              or "official" (dataset ships train/test; val carved from train).
+#              group_regex (optional): regex on the file stem whose first group identifies a physical part/board;
+#              whole groups go to one split (prevents leakage, plan §2.1 note on PKU-PCB).
 # min_area:    mask datasets only - connected components smaller than this (pixels) are dropped (plan §2.3, TBD 4-9)
 # mask_thr:    mask datasets only - pixel > mask_thr is foreground (Magnetic Tile masks may be soft)
 # role:        source | target (target datasets are never used in phases 1-2)
+# balance:     class-imbalance handling for <ds>_bal_v1 (plan §2.5.5; global knobs in protocol.yaml -> balance)
+#   mode:        "auto" (only if max/min boxes per class >= imbalance_threshold) | "on" | "off" (quoted: bare on/off are YAML booleans)
+#   geo_ops:     offline geometric ops for class-aware augmentation (hflip, vflip, rot90, rot180)
+#   copy_paste:  paste rare-class defects (bbox + feathered background ring) onto other train images
 
 split_seed: 42
 
@@ -17,6 +24,7 @@ datasets:
     classes: [crazing, inclusion, patches, pitted_surface, rolled-in_scale, scratches]
     class_map: {}
     split: {train: 0.8, val: 0.1, test: 0.1}   # 1440/180/180 like DAC-YOLO
+    balance: {mode: "auto", geo_ops: [hflip, vflip, rot90, rot180], copy_paste: false}  # defects cover most of the image
 
   gc10:
     name: GC10-DET
@@ -36,6 +44,8 @@ datasets:
       9_zhehen: crease
       10_yaozhe: waist_folding
     split: {train: 0.8, val: 0.1, test: 0.1}   # TBD: check for a standard split in the literature
+    # rot90 left out until checked visually: some defects may follow the rolling direction (plan §2.5.5)
+    balance: {mode: "on", geo_ops: [hflip, vflip], copy_paste: true}
 
   pcb:
     name: PKU-Market-PCB
@@ -44,6 +54,10 @@ datasets:
     classes: [missing_hole, mouse_bite, open_circuit, short, spur, spurious_copper]
     class_map: {}
     split: {train: 0.8, val: 0.1, test: 0.1}
+    # TBD (plan §2.1): the ~10 source boards are reused across images. If the stem encodes the board
+    # (e.g. "01_missing_hole_01" -> board 01), uncomment to split by board and avoid train/test leakage:
+    # split: {train: 0.8, val: 0.1, test: 0.1, group_regex: "^(\\d+)_"}
+    balance: {mode: "auto", geo_ops: [hflip, vflip, rot90, rot180], copy_paste: true}
 
   mt:
     name: Magnetic-Tile
@@ -55,6 +69,7 @@ datasets:
     min_area: 9
     mask_thr: 127
     split: {train: 0.8, val: 0.1, test: 0.1}
+    balance: {mode: "on", geo_ops: [hflip, vflip, rot180], copy_paste: true}
 
   ksdd2:
     name: KolektorSDD2
@@ -65,3 +80,4 @@ datasets:
     min_area: 9
     mask_thr: 0
     split: {official: true, val: 0.1}
+    balance: {mode: "off"}     # single class: imbalance is defect vs clean -> bg_ratio in the phase-3 grid
