@@ -52,7 +52,8 @@ class ReadReport:
     dropped_small: int = 0       # mask components < min_area
     dropped_degenerate: int = 0  # zero-size / out-of-image boxes
     missing_images: int = 0      # annotation without image
-    duplicates: int = 0
+    duplicates: int = 0          # duplicated annotation files (same stem)
+    duplicate_boxes: int = 0     # identical (class, box) repeated inside one image -> kept once
     notes: list = field(default_factory=list)
 
 
@@ -134,6 +135,11 @@ def read_voc(root: Path, cfg: dict) -> tuple[list[Sample], ReadReport]:
             boxes.append([float(b.findtext(k)) for k in ("xmin", "ymin", "xmax", "ymax")])
             classes.append(lookup[name])
         boxes = np.asarray(boxes, float).reshape(-1, 4)
+        if len(boxes):  # identical duplicates (NEU has a few): Ultralytics drops them in training, so must the GT
+            _, first = np.unique(np.column_stack([classes, boxes]), axis=0, return_index=True)
+            first = np.sort(first)
+            rep.duplicate_boxes += len(boxes) - len(first)
+            boxes, classes = boxes[first], [classes[i] for i in first]
         # VOC is 1-based inclusive; convert to 0-based [x1, x2) pixel extents
         boxes[:, :2] -= 1
         boxes, keep = _clip_boxes(boxes, w, h)

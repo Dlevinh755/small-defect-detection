@@ -4,6 +4,12 @@
 imgsz: 640
 workers: 4
 amp: true
+# Ultralytics cache='ram' (images decoded + resized to imgsz once) for datasets with large originals: reading 1-2 MB
+# JPEGs from /kaggle/input and decoding 2000+ px images every epoch starves the GPU. Applied per dataset (derived
+# ids like pcb_bal_v1 included), so every model on one dataset gets the same setting. Ultralytics notes that the RAM
+# cache may make runs not bit-identical; seed-to-seed variation is reported anyway. 'disk' would store full-size
+# .npy files (~13 GB for PKU-PCB) and is not an option on Kaggle.
+cache_ram: [pcb, gc10]
 
 families:
   yolo:            # YOLO11n and all its variants (Ultralytics)

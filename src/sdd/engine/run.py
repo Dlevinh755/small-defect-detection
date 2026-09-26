@@ -130,6 +130,8 @@ def _train_ultralytics(spec: RunSpec, rd: Path, data_yaml: Path, fam: dict, devi
                   amp=protocol()["amp"], device=device, project=str(rd), exist_ok=True, plots=True, verbose=False)
     if spec.smoke:
         common["fraction"] = protocol()["smoke"]["fraction"]
+    if base_dataset(spec.dataset) in protocol().get("cache_ram", []):
+        common["cache"] = "ram"
     common.update(variant.get("train_args", {}))  # e.g. cls_pw for class-weighted BCE
     common.update(spec.extra)
     trainer = yt.make_trainer(variant) if family == "yolo" else None

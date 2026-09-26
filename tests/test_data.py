@@ -79,3 +79,19 @@ def test_merge_prefixes_classes(raw_data):
     assert names[0] == "neu/crazing" and names[6] == "ksdd2/defect"
     ks = [s for s in samples_from_coco(d, "train") if s.uid.startswith("ksdd2__") and len(s.classes)]
     assert ks and all((s.classes == 6).all() for s in ks)
+
+
+def test_voc_identical_duplicate_boxes_are_kept_once(tmp_path):
+    import cv2
+
+    from sdd.config import dataset_cfg
+    from sdd.data.readers import read_dataset
+
+    root = tmp_path / "voc"
+    root.mkdir()
+    cv2.imwrite(str(root / "a.jpg"), np.zeros((50, 50, 3), np.uint8))
+    obj = "<object><name>crazing</name><bndbox><xmin>2</xmin><ymin>2</ymin><xmax>9</xmax><ymax>9</ymax></bndbox></object>"
+    other = obj.replace("crazing", "patches")
+    (root / "a.xml").write_text(f"<annotation><size><width>50</width><height>50</height></size>{obj}{obj}{other}</annotation>")
+    samples, rep = read_dataset(root, dataset_cfg("neu"))
+    assert len(samples[0].boxes) == 2 and rep.duplicate_boxes == 1   # same box, different class -> both kept
