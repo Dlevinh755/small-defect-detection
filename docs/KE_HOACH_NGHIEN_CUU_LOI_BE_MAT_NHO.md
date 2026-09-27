@@ -142,13 +142,14 @@ Dùng **cả hai** định nghĩa, báo cáo song song:
 | **Theo kích thước lỗi** | Lỗi nhỏ nhiều/ít tùy bộ | Tất cả | Đây là **trọng tâm đề tài** – đo trong EDA, xử lý bằng cải tiến kiến trúc/loss (Mục 5) |
 | Vật thể vs nền (trong ảnh) | Đặc trưng có sẵn của detection | Tất cả | **Không** – detector hiện đại đã xử lý (TAL assigner, focal/BCE, Hungarian matching) |
 
-#### 2.5.2. Bảng thống kê mất cân bằng (điền sau EDA)
+#### 2.5.2. Bảng thống kê mất cân bằng (✅ đã điền sau EDA – chi tiết: [KET_QUA_GD1.md](KET_QUA_GD1.md) Mục 2.5)
 | Dataset | Lớp nhiều nhất (số box) | Lớp ít nhất (số box) | Tỉ lệ max/min | Ảnh lỗi : ảnh không lỗi | Số box test của lớp ít nhất | Mức độ |
 |---|---|---|---|---|---|---|
-| NEU-DET | ⏳ | ⏳ | ⏳ | chỉ có ảnh lỗi | ⏳ | ⏳ |
-| GC10-DET | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| PKU-PCB / MT | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| KSDD2 | 1 lớp | – | – | ~1:8 | ⏳ | ⏳ |
+| NEU-DET | inclusion (788) | pitted_surface (348) | 2.26 | chỉ có ảnh lỗi | 44 | nhẹ |
+| GC10-DET | silk_spot (704) | crease (61) | 11.54 | ~1 : 0 (2 ảnh sạch) | 8 | nặng – hiếm: crescent_gap, rolled_pit, crease, waist_folding |
+| PKU-PCB | spurious_copper (405) | spur (386) | 1.05 | chỉ có ảnh lỗi | 52 | nhẹ |
+| Magnetic Tile | break (96) | fray (30) | 3.20 | 1 : 2.47 | 4 | vừa – hiếm: fray |
+| KSDD2 | 1 lớp | – | – | 1 : 8.4 (356 / 2979) | – | (lỗi / sạch – GĐ3) |
 
 Quy ước mức độ (đề xuất): max/min < 3 → nhẹ; 3–10 → vừa; > 10 → nặng. Lớp có **< 10 box ở tập test** → đánh dấu "AP không ổn định", không rút kết luận riêng cho lớp đó.
 
@@ -374,12 +375,12 @@ Thứ tự ưu tiên chạy: YOLO11n `_bal` → đối chứng YOLO11n gốc →
 8. Phân tích lỗi (TIDE + ảnh minh họa)
 9. Kế hoạch Giữa kỳ (dựa trên chẩn đoán – Mục 5.1)
 
-### 4.7. Kết luận GĐ1 (điền sau)
-- Mô hình chung: ⏳ TBD
-- Loại lỗi chiếm ưu thế theo TIDE: ⏳ TBD
-- P2 có giúp AP_small không? Ở dataset nào? ⏳ TBD
-- Cân bằng bằng tăng cường có tăng AP_rare không? AP_common có giảm không? Augment hay copy-paste đóng góp nhiều hơn? ⏳ TBD
-- → Hướng cải tiến GĐ2: ⏳ TBD (theo bảng quyết định 5.1)
+### 4.7. Kết luận GĐ1 (✅ số liệu đầy đủ: [KET_QUA_GD1.md](KET_QUA_GD1.md), 1 seed)
+- Mô hình chung: **YOLO11n** – kém mô hình tốt nhất 1–3 AP (GC10/NEU/MT), 7 AP trên PCB (RT-DETR-l 56.7 so với 49.7), nhưng 6.4 GFLOPs so với 105–451.
+- Loại lỗi chiếm ưu thế theo TIDE: ⏳ đọc từ `results/figures/p1/tide_*.png`.
+- P2 có giúp AP_small không? **Không**: AP gần như không đổi trên GC10/PCB, giảm 4.6 AP trên NEU; chỉ AP_rel_small GC10 +2.4. Trên PCB (lỗi nhỏ nhất) cũng không giúp → hướng tile / SAHI.
+- Cân bằng bằng tăng cường: **không có lợi** trên GC10 (AP_rare 42.8 dữ liệu gốc → 39.8 chỉ tăng cường → 35.6 tăng cường + copy-paste; AP_common gần như không đổi); copy-paste kém hơn chỉ tăng cường. MT không kết luận được (fray 4 box test).
+- → Hướng cải tiến GĐ2 (đề xuất, chờ xác nhận): dữ liệu gốc; backbone = Coordinate Attention (+2.6 AP GC10 trong screening); loss = class-weighted BCE (+2.3 / +1.1 AP; +8.7 AP_rel_small GC10), có thể thêm Wise-IoU; SimAM và NWD kém hơn mốc.
 
 ---
 
@@ -588,12 +589,21 @@ small-defect-detection/
 | | Giữ KSDD2 làm dữ liệu đích, không dùng ở GĐ1–2 | Đảm bảo transfer learning là dữ liệu mới | |
 | 2026-09-27 | **GĐ1 có xử lý mất cân bằng** bằng class-aware augmentation + copy-paste (offline, chỉ train); mọi mô hình dùng chung `_bal_v1`; thêm run đối chứng YOLO11n trên dữ liệu gốc (epoch khớp iteration) | Yêu cầu của nhóm; vẫn đo được tác dụng nhờ đối chứng; so sánh mô hình vẫn công bằng | Vinh |
 | | Không dùng DETR gốc làm baseline chính (giữ RT-DETR) | Notebook DETR-SE: chỉ dùng C5 (stride 32), chưa hội tụ sau 30 epoch, ~4 phút/epoch | |
-| | | | |
+| 2026-09-26 | Nhóm kích thước tương đối `[0, 0.005, 0.02, 1]` | EDA: GC10 có 80 / 51 / 227 box test (đều ≥ 50); không ngưỡng chung nào đạt cho mọi bộ | |
+| 2026-09-26 | Cân bằng chế độ auto: NEU, PCB không cân bằng (max/min < 3); GC10, MT cân bằng; GC10 chưa bật xoay 90° | Bảng 2.5.2 | |
+| 2026-09-26 | Không đưa NEU / PCB vào run đối chứng cân bằng | Không áp dụng cân bằng cho hai bộ này | |
+| 2026-09-26 | PKU-PCB giữ chia ngẫu nhiên (không chia theo bo) | Dễ so sánh với tài liệu; chia theo bo chỉ còn ~1 bo cho test. Ghi là hạn chế | |
+| 2026-09-27 | Cố định `splits/` trong repo (commit `2df7f89`) | Mọi phiên / tài khoản dùng chung một cách chia | |
+| 2026-09-27 | `cache='ram'` cho PCB, GC10 | Đọc ảnh lớn qua ổ mạng làm GPU chờ; áp dụng như nhau cho mọi mô hình trên một bộ | |
+| 2026-09-27 | Bỏ box trùng y hệt trong NEU; bỏ ảnh MT có mask rỗng; bỏ file rác KSDD2; ánh xạ `10_yaozhed`, bỏ nhãn `d` ở GC10 | Kiểm tra dữ liệu thật (KET_QUA_GD1.md Mục 2.2) | |
 
 ### 11.2. Nhật ký thực nghiệm
 | Ngày | Run name | Mục đích | Kết quả chính | Ghi chú / sự cố |
 |---|---|---|---|---|
-| | | | | |
+| 2026-09-26 | `download_data.py`, EDA | Tải, kiểm tra, phân tích dữ liệu | 5 bộ đạt kiểm tra; bảng 2.5.2 | Phát hiện lỗi nhãn GC10 / MT / KSDD2 / NEU → đã xử lý |
+| 2026-09-26 | `<ds>_bal_v1`, `gc10_aug_v1` | Cân bằng offline | GC10 +566 ảnh (+30.8%), MT +251 (+23.5%), NEU / PCB không đổi | t = 0.2, cap = 4, seed 42 |
+| 2026-09-27 | `p1_*` (19 run), `p2s_*` (22 run) | GĐ1 + screening GĐ2 | Xem KET_QUA_GD1.md Mục 5–6 | 5 phiên song song / 3 tài khoản; lỗi đo GFLOPs sau train → sửa `3d6fab6`, đánh giá lại không train lại |
+| 2026-09-28 | Phiên tổng hợp | Đánh giá lại 41 run, báo cáo | GĐ1 ≈ 16.8 giờ GPU, screening ≈ 16.4 giờ GPU | Sửa bảng AP theo lớp và biểu đồ > 8 mô hình (`54763ca`, `a4d8fbb`) |
 
 ---
 
