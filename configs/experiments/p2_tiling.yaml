@@ -1,12 +1,15 @@
-# Large-image track (plan §5.1 "tăng imgsz / SAHI"), for datasets whose defects shrink when resized to 640.
-# Every row is scored on the same ORIGINAL full test images as phase 1; compare with the phase-1 yolo11n runs.
-#   rows 1-2: sliced inference only, re-using the phase-1 checkpoints (no training, minutes per dataset)
-#   row 3:    train on 640x640 tiles of the balanced data (<ds>_bal_v1_t640, built automatically) + sliced inference
+# Large-image track (plan §5.1 "tăng imgsz / SAHI") for PCB and GC10, where defects shrink when resized to 640.
+# Every row is scored on the same ORIGINAL full test images.
+#   rows 1-2: SAHI-style sliced inference on the phase-1 checkpoints (trained on <ds>_bal_v1; no training)
+#   row 3:    sliced inference on the phase-2 A0 checkpoint (original data, seed 0; needs the ablation run first -
+#             in parallel sessions it may fail once and is retried by the aggregate session)
+#   row 4:    train on 640x640 tiles of the ORIGINAL data (<ds>_t640, built automatically) + sliced inference
+# Compare row 3/4 with p2_<ds>_yolo11n_A0_s0 and rows 1-2 with p1_<ds>_bal_v1_yolo11n_{base,p2}_s0.
 phase: p2t
 datasets: [pcb, gc10]
-data_suffix: _bal_v1          # same train data as phase 1 (reuse_phase looks up p1_<ds>_bal_v1_...)
 seeds: [0]
 runs:
-  - {model: yolo11n, variant: base, infer: sliced, reuse_phase: p1}
-  - {model: yolo11n, variant: p2, infer: sliced, reuse_phase: p1}
-  - {model: yolo11n, variant: base, infer: sliced, data_suffix: _bal_v1_t640}
+  - {model: yolo11n, variant: base, infer: sliced, reuse_phase: p1, data_suffix: _bal_v1}
+  - {model: yolo11n, variant: p2, infer: sliced, reuse_phase: p1, data_suffix: _bal_v1}
+  - {model: yolo11n, variant: A0, infer: sliced, reuse_phase: p2}
+  - {model: yolo11n, variant: A0, infer: sliced, data_suffix: _t640}

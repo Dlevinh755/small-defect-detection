@@ -1,9 +1,9 @@
-# Phase 2 (Giữa kỳ): ablation A0-A7, 3 seeds (plan §5.4). ~48 GPU-h in full.
-# Budget option (b): run A0, A1-A3, A7 with 3 seeds first (this file), then p2_ablation_rest.yaml.
+# Phase 2 (Giữa kỳ): ablation A0-A8 x 3 seeds (plan §5.4), decided 2026-09-28 (docs/KET_QUA_GD1.md §9).
+# 9 configurations x 3 datasets x 3 seeds = 81 runs (~40 GPU-h estimated from the phase-1 timings).
+# Original data: the phase-1 balancing (table B) did not help. PCB added: it is the dataset with truly small defects.
 phase: p2
-datasets: [neu, gc10]
-# Train data: balanced split if phase 1 showed balancing helps (plan §5.4). TBD after phase 1: "" = original data.
-data_suffix: _bal_v1
+datasets: [gc10, pcb, neu]
+data_suffix: ""
 seeds: [0, 1, 2]
 runs:
   - {model: yolo11n, variant: A0}
@@ -11,3 +11,7 @@ runs:
   - {model: yolo11n, variant: A2}
   - {model: yolo11n, variant: A3}
   - {model: yolo11n, variant: A7}
+  - {model: yolo11n, variant: A4}
+  - {model: yolo11n, variant: A5}
+  - {model: yolo11n, variant: A6}
+  - {model: yolo11n, variant: A8}

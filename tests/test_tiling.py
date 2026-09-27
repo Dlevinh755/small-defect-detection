@@ -56,7 +56,9 @@ def test_merge_detections_is_classwise_nms():
 def test_tiling_grid_and_reuse_names():
     specs = expand(load_yaml(grid_path("p2_tiling")))
     names = [s.name for s in specs]
-    assert "p2t_pcb_bal_v1_yolo11n_base_sahi_s0" in names and "p2t_gc10_bal_v1_t640_yolo11n_base_sahi_s0" in names
+    assert "p2t_pcb_bal_v1_yolo11n_base_sahi_s0" in names and "p2t_gc10_t640_yolo11n_A0_sahi_s0" in names
+    a0 = next(s for s in specs if s.reuse_phase == "p2")
+    assert a0.reuse_source() == f"p2_{a0.dataset}_yolo11n_A0_s0"  # SAHI on the phase-2 A0 checkpoint
     s = next(s for s in specs if s.reuse_phase)
     assert s.reuse_source() == f"p1_{s.dataset}_yolo11n_{s.variant}_s0" and s.dataset.endswith("_bal_v1")
     assert RunSpec("p1", "neu", "yolo11n").name == "p1_neu_yolo11n_base_s0"

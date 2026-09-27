@@ -298,7 +298,14 @@ Chi phí screening: GC10 8.9 h + NEU 7.5 h = **16.4 giờ GPU** (22 run, ~0.5–
 
 ---
 
-## 9. Quyết định cho GĐ2 (chờ xác nhận)
+## 9. Quyết định cho GĐ2 (✅ đã chốt 2026-09-28)
+
+Chốt: A2 = Coordinate Attention, A3 = class-weighted BCE (`clsw`), thêm A8 = Wise-IoU; dữ liệu gốc; ablation trên
+GC10 + PCB + NEU, đủ 3 seed cho A0–A8 (81 run); chạy song song `p2_tiling` (SAHI / tile). Không chạy thêm seed cho Bảng B.
+Kiểm định t-test trên **AP** và **AP_rel_small** (không dùng AP_s COCO). Cấu hình: `configs/variants.yaml`,
+`configs/experiments/p2_ablation.yaml`, `p2_tiling.yaml`.
+
+Đề xuất ban đầu:
 
 | # | Đề xuất | Căn cứ |
 |---|---|---|

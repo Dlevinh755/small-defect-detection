@@ -22,7 +22,7 @@ from sdd.reporting.tables import (main_data_version, save_table, table_ablation,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--reference", default="A0", help="ablation reference variant")
-    ap.add_argument("--test-metric", default="AP_s")
+    ap.add_argument("--test-metrics", nargs="+", default=["AP", "AP_rel_small"], help="ablation t-test metrics")
     ap.add_argument("--include-smoke", action="store_true", help="also report --smoke runs (pipeline check)")
     ap.add_argument("--gallery", nargs="*", default=[], help="run names to build error galleries for")
     a = ap.parse_args()
@@ -74,9 +74,10 @@ def main():
         if not tb.empty:
             save_table(tb, tdir, "p1_balance_effect")
     if "p2" in phases:
-        save_table(table_ablation(df, "p2", a.reference, a.test_metric), tdir, "p2_ablation")
-        fig(lambda: plots.metric_by_model(df[df.phase == "p2"], a.test_metric, f"Ablation: {a.test_metric}"),
-            fdir / "p2" / f"{a.test_metric}_ablation.png")
+        save_table(table_ablation(df, "p2", a.reference, a.test_metrics), tdir, "p2_ablation")
+        for tm in a.test_metrics:
+            fig(lambda: plots.metric_by_model(df[df.phase == "p2"], tm, f"Ablation: {tm} (mean ± std over seeds)"),
+                fdir / "p2" / f"{tm}_ablation.png")
     if "p3" in phases:
         save_table(table_transfer(df), tdir, "p3_transfer")
         for metric in ("AP_s", "AP", "img_detection_rate", "false_alarm_rate"):

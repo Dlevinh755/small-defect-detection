@@ -55,7 +55,9 @@ def test_tables_and_figures(tmp_path):
     t1 = table_phase1(df)
     assert set(t1.Model) == {"yolo11n", "yolo11n-p2", "frcnn"}
     ab = table_ablation(df)
-    assert ab.set_index(["dataset", "variant"]).loc[("neu", "A7"), "improved"]
+    ab_i = ab.set_index(["dataset", "variant"])
+    assert ab_i.loc[("neu", "A7"), "improved(AP)"] and not ab_i.loc[("neu", "A0"), "improved(AP)"]
+    assert "p(AP)" in ab.columns and "p(AP_rel_small)" in ab.columns
     tr = table_transfer(df)
     assert len(tr) == 3 * 2 * 4
     save_table(ab, tmp_path, "ab")

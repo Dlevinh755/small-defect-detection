@@ -1,9 +1,6 @@
+# Kept empty on purpose: the full A0-A8 x 3 seeds ablation fits the budget and lives in p2_ablation.yaml.
+# (The notebook / run_all.py still call this grid; with no runs it finishes immediately.)
 phase: p2
-datasets: [neu, gc10]
-# Train data: balanced split if phase 1 showed balancing helps (plan §5.4). TBD after phase 1: "" = original data.
-data_suffix: _bal_v1
+datasets: [gc10]
 seeds: [0]
-runs:
-  - {model: yolo11n, variant: A4}
-  - {model: yolo11n, variant: A5}
-  - {model: yolo11n, variant: A6}
+runs: []

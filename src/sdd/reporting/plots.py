@@ -54,7 +54,8 @@ def metric_by_model(df: pd.DataFrame, metric: str = "AP_s", title: str | None = 
     d = _labelled(df)
     models = list(dict.fromkeys(d.Model))
     if _too_many(models):
-        return metric_ranked(df, metric, (title or f"{metric} by model") + "  (orange = yolo11n baseline)")
+        ref = next((m for m in ("yolo11n", "yolo11n-A0") if m in models), models[0])
+        return metric_ranked(df, metric, (title or f"{metric} by model") + f"  (orange = {ref})", reference=ref)
     cmap = style.color_map(models)
     g = d.groupby(["dataset", "Model"], sort=False)[metric].agg(["mean", "std"]).reset_index()
     datasets = list(dict.fromkeys(d.dataset))

@@ -94,20 +94,29 @@ def _pm(mean, std, pct=True) -> str:
     return s
 
 
-def table_ablation(df: pd.DataFrame, phase: str = "p2", reference: str = "A0", test_metric: str = "AP_s") -> pd.DataFrame:
-    d = df[df.phase == phase]
-    metrics = [m for m in ["AP", "AP_s", "AP75_s", "AP_rel_small", "R_rel_small"] if m in d]
+def table_ablation(df: pd.DataFrame, phase: str = "p2", reference: str = "A0",
+                   test_metrics=("AP", "AP_rel_small")) -> pd.DataFrame:
+    """Plan §5.5: mean ± std over seeds and, for every test metric, Δ vs the reference, Welch p and the plan's
+    "improved" verdict (p < 0.05 and Δ > std). AP_s (COCO) is shown but not tested: it rests on very few boxes for
+    GC10 / PCB (docs/KET_QUA_GD1.md §8)."""
+    if isinstance(test_metrics, str):
+        test_metrics = (test_metrics,)
+    d = with_labels(df[df.phase == phase])  # groups derived ids under their evaluation dataset
+    metrics = [m for m in ["AP", "AP50", "AP75", "AP_s", "AP_rel_small", "R_rel_small", "AP_rare"] if m in d]
     ms = mean_std(d, ["dataset", "variant"], metrics + [c for c in ["params_M", "GFLOPs", "fps_fp16"] if c in d])
-    cmp = compare_to_reference(d, "variant", reference, test_metric)
     out = ms[["dataset", "variant", "n_seeds"]].copy()
     for m in metrics:
         out[m] = [_pm(a, b) for a, b in zip(ms[f"{m}_mean"], ms[f"{m}_std"])]
     for m in ["params_M", "GFLOPs", "fps_fp16"]:
         if f"{m}_mean" in ms:
             out[m] = [f"{v:.2f}" if m != "fps_fp16" else f"{v:.0f}" for v in ms[f"{m}_mean"]]
-    out = out.merge(cmp[["dataset", "variant", "delta_vs_ref", "p", "improved"]], on=["dataset", "variant"], how="left")
-    out[f"Δ{test_metric}"] = [_fmt(v, True) for v in out.pop("delta_vs_ref")]
-    out[f"p vs {reference}"] = [f"{p:.3f}" if not np.isnan(p) else "-" for p in out.pop("p")]
+    for tm in (t for t in test_metrics if t in d):
+        cmp = compare_to_reference(d, "variant", reference, tm).rename(
+            columns={"delta_vs_ref": f"Δ{tm}", "p": f"p({tm})", "improved": f"improved({tm})"})
+        out = out.merge(cmp[["dataset", "variant", f"Δ{tm}", f"p({tm})", f"improved({tm})"]],
+                        on=["dataset", "variant"], how="left")
+        out[f"Δ{tm}"] = [_fmt(v, True) for v in out[f"Δ{tm}"]]
+        out[f"p({tm})"] = [f"{p:.3f}" if not pd.isna(p) else "-" for p in out[f"p({tm})"]]
     return out
 
 

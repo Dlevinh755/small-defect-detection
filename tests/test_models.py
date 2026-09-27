@@ -34,8 +34,9 @@ def test_variant_trains_one_step(name):
 
 
 def test_variant_inheritance():
-    a7 = variant_cfg("A7")
-    assert a7["model_cfg"].endswith("yolo11n-p2.yaml") and a7["backbone"] == "simam" and a7["loss"] == "nwd"
+    a7 = variant_cfg("A7")  # P2 + Coordinate Attention + class-weighted BCE (chosen after screening)
+    assert a7["model_cfg"].endswith("yolo11n-p2.yaml") and a7["backbone"] == "ca" and a7["train_args"] == {"cls_pw": 0.5}
+    assert variant_cfg("A8")["loss"] == "wiou" and variant_cfg("A8")["backbone"] == "none"
     assert variant_cfg("A2")["model_cfg"] == "yolo11n.yaml"
 
 

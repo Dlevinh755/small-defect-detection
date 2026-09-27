@@ -46,14 +46,16 @@ variants:
   clsw: {inherit: [base], train_args: {cls_pw: 0.5}}
   focal: {inherit: [base], cls_loss: focal, focal_gamma: 1.5, focal_alpha: 0.25}
 
-  # ---------- phase-2 ablation (plan §5.4) ----------
-  # TBD after phase 1: swap the backbone / loss entries below for the ones the diagnosis points to (plan §5.1).
+  # ---------- phase-2 ablation (plan §5.4) - chosen 2026-09-28 from phase 1 + screening (docs/KET_QUA_GD1.md) ----------
+  # neck = P2 (kept as planned although it did not help in phase 1), backbone = Coordinate Attention
+  # (best backbone in screening, +2.6 AP GC10), loss = class-weighted BCE 1/sqrt(freq) (best overall, +2.3 / +1.1 AP).
+  # SimAM and NWD (the original defaults) were below the baseline in screening.
   A0: {inherit: [base]}
-  A1: {inherit: [p2]}
-  A2: {inherit: [simam]}
-  A3: {inherit: [nwd]}
-  A4: {inherit: [p2, simam]}
-  A5: {inherit: [p2, nwd]}
-  A6: {inherit: [simam, nwd]}
-  A7: {inherit: [p2, simam, nwd]}
-  A8: {inherit: [clsw]}          # TBD after phase 1 (plan §5.4): A0 + class-weighted (or focal) loss
+  A1: {inherit: [p2]}                # + neck
+  A2: {inherit: [ca]}                # + backbone
+  A3: {inherit: [clsw]}              # + loss
+  A4: {inherit: [p2, ca]}
+  A5: {inherit: [p2, clsw]}
+  A6: {inherit: [ca, clsw]}
+  A7: {inherit: [p2, ca, clsw]}      # full model
+  A8: {inherit: [wiou]}              # box-regression loss check: A0 + Wise-IoU v3 (best IoU-type loss in screening)

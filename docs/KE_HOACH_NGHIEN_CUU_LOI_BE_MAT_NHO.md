@@ -595,6 +595,7 @@ small-defect-detection/
 | 2026-09-26 | PKU-PCB giữ chia ngẫu nhiên (không chia theo bo) | Dễ so sánh với tài liệu; chia theo bo chỉ còn ~1 bo cho test. Ghi là hạn chế | |
 | 2026-09-27 | Cố định `splits/` trong repo (commit `2df7f89`) | Mọi phiên / tài khoản dùng chung một cách chia | |
 | 2026-09-27 | `cache='ram'` cho PCB, GC10 | Đọc ảnh lớn qua ổ mạng làm GPU chờ; áp dụng như nhau cho mọi mô hình trên một bộ | |
+| 2026-09-28 | **Ablation GĐ2:** A1 = P2, A2 = Coordinate Attention, A3 = class-weighted BCE, A8 = Wise-IoU; dữ liệu gốc; GC10 + PCB + NEU; 3 seed cho A0–A8 (81 run); t-test trên AP và AP_rel_small; chạy kèm SAHI / tile | Screening: CA +2.6 AP GC10, clsw +2.3 / +1.1 AP; SimAM, NWD dưới mốc; Bảng B: cân bằng dữ liệu không có lợi; PCB là bộ lỗi nhỏ thật sự | |
 | 2026-09-27 | Bỏ box trùng y hệt trong NEU; bỏ ảnh MT có mask rỗng; bỏ file rác KSDD2; ánh xạ `10_yaozhed`, bỏ nhãn `d` ở GC10 | Kiểm tra dữ liệu thật (KET_QUA_GD1.md Mục 2.2) | |
 
 ### 11.2. Nhật ký thực nghiệm
