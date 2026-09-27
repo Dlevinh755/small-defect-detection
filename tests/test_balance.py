@@ -131,3 +131,17 @@ def test_imbalance_metrics_and_table(raw_data):
     assert list(tb.Data) == ["bal_v1", "orig (iter-matched)"] and list(tb.AP_rare) == ["35.0", "20.0"]
     labels = set(with_labels(df).Model)
     assert labels == {"yolo11n", "yolo11n [orig, iter-matched]"} or len(labels) == 2
+
+
+def test_per_class_table_ignores_other_datasets_classes():
+    from sdd.reporting.tables import table_per_class
+
+    df = pd.DataFrame([
+        {"phase": "p1", "dataset": "neu_bal_v1", "eval_dataset": "neu", "model": "yolo11n", "variant": "base",
+         "n_test_cls/crazing": 30, "AP_cls/crazing": 0.5, "n_test_cls/crease": np.nan, "AP_cls/crease": np.nan},
+        {"phase": "p1", "dataset": "gc10_bal_v1", "eval_dataset": "gc10", "model": "yolo11n", "variant": "base",
+         "n_test_cls/crazing": np.nan, "AP_cls/crazing": np.nan, "n_test_cls/crease": 8, "AP_cls/crease": 0.2},
+    ])
+    t = table_per_class(df, "p1", "neu")
+    assert list(t["class"]) == ["crazing"] and list(t["test boxes"]) == [30]
+    assert list(table_per_class(df, "p1", "gc10")["class"]) == ["crease"]

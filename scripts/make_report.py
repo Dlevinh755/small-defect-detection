@@ -9,6 +9,7 @@ import argparse
 import _bootstrap  # noqa: F401
 import pandas as pd
 
+from sdd.data.resolve import ensure_dataset
 from sdd.env import paths
 from sdd.reporting import plots
 from sdd.reporting.error_gallery import gallery
@@ -70,7 +71,7 @@ def main():
                 save(plots.transfer_curves(df, metric), fdir / "p3" / f"transfer_{metric}.png")
     for run in a.gallery:
         r = df[df.run == run].iloc[0]
-        counts = gallery(paths().run_dir(run), paths().data_dir(r.dataset), fdir / "errors" / run)  # test = base test
+        counts = gallery(paths().run_dir(run), ensure_dataset(r.dataset), fdir / "errors" / run)  # builds if missing
         print(run, counts)
     print(f"tables -> {tdir}\nfigures -> {fdir}")
 

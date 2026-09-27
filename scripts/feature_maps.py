@@ -18,6 +18,7 @@ import numpy as np
 import torch
 
 from sdd.data.build import samples_from_coco
+from sdd.data.resolve import ensure_dataset
 from sdd.env import paths
 from sdd.reporting.feature_maps import capture, channel_grid, compare_runs, letterbox, load_run_model
 from sdd.reporting.style import save
@@ -37,7 +38,7 @@ def main():
 
     dev = f"cuda:{a.device}" if torch.cuda.is_available() and a.device != "cpu" else "cpu"
     models = {r: load_run_model(paths().run_dir(r)).to(dev) for r in a.runs}
-    samples = [s for s in samples_from_coco(paths().data_dir(a.dataset), "test") if len(s.boxes)]
+    samples = [s for s in samples_from_coco(ensure_dataset(a.dataset), "test") if len(s.boxes)]  # builds if missing
     if a.uids:
         samples = [s for s in samples if s.uid in set(a.uids)]
     else:  # images whose smallest box is smallest relative to the image

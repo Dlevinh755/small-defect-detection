@@ -149,8 +149,9 @@ def table_per_class(df: pd.DataFrame, phase: str, dataset: str) -> pd.DataFrame:
     d = d[d.dataset == dataset]
     if d.empty:
         return pd.DataFrame()
-    classes = [c.split("/", 1)[1] for c in d.columns if c.startswith("n_test_cls/")]
     r0 = d.iloc[0]
+    # the master table holds the classes of every dataset: keep the ones this dataset actually has
+    classes = [c.split("/", 1)[1] for c in d.columns if c.startswith("n_test_cls/") and pd.notna(r0[c])]
     rare = set(str(r0.get("rare_classes", "")).split(";"))
     unstable = set(str(r0.get("unstable_classes", "")).split(";"))
     out = pd.DataFrame({"class": classes,
