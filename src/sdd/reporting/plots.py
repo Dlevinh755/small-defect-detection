@@ -16,10 +16,45 @@ def _labelled(df: pd.DataFrame) -> pd.DataFrame:
     return with_labels(df)
 
 
+def _too_many(models) -> bool:
+    """More series than distinguishable colours -> switch to a single-hue ranked form (never invent hues)."""
+    return len(models) > len(style.CATEGORICAL)
+
+
+def metric_ranked(df: pd.DataFrame, metric: str, title: str | None = None, reference: str = "yolo11n"):
+    """One panel per dataset, one horizontal bar per model sorted by the metric (single hue); the reference model
+    (e.g. the phase-1 YOLO11n baseline) is drawn in the second colour and as a dashed line."""
+    d = _labelled(df)
+    datasets = list(dict.fromkeys(d.dataset))
+    n = d.Model.nunique()
+    fig, axes = plt.subplots(1, len(datasets), figsize=(4.2 * len(datasets), 0.32 * n + 1.3), squeeze=False)
+    for ax, ds in zip(axes[0], datasets):
+        g = d[d.dataset == ds].groupby("Model")[metric].agg(["mean", "std"]).sort_values("mean")
+        colors = [style.CATEGORICAL[1] if m == reference else style.CATEGORICAL[0] for m in g.index]
+        ax.barh(g.index, g["mean"] * 100, color=colors, height=0.62,
+                xerr=g["std"].fillna(0) * 100 if g["std"].notna().any() else None,
+                error_kw={"lw": 1, "capsize": 2, "ecolor": style.INK_2})
+        for y, v in enumerate(g["mean"] * 100):
+            ax.text(v, y, f" {v:.1f}", va="center", fontsize=8, color=style.INK_2)
+        if reference in g.index:
+            ax.axvline(g.loc[reference, "mean"] * 100, color=style.MUTED, lw=1, ls="--")
+        ax.set_title(ds.upper(), fontsize=10)
+        ax.set_xlabel(f"{metric} (%)")
+        ax.grid(axis="y", visible=False)
+        ax.set_xlim(0, max(1, (g["mean"] * 100).max() * 1.15))
+    fig.suptitle(title or f"{metric} by model" + f"  (orange = {reference})", x=0.01, ha="left",
+                 fontweight="bold", fontsize=11)
+    fig.tight_layout()
+    return fig
+
+
 def metric_by_model(df: pd.DataFrame, metric: str = "AP_s", title: str | None = None):
-    """Grouped bars: datasets on x, one bar per model (mean over seeds, error bar = std when > 1 seed)."""
+    """Grouped bars: datasets on x, one bar per model (mean over seeds, error bar = std when > 1 seed).
+    With more models than colours it falls back to :func:`metric_ranked`."""
     d = _labelled(df)
     models = list(dict.fromkeys(d.Model))
+    if _too_many(models):
+        return metric_ranked(df, metric, (title or f"{metric} by model") + "  (orange = yolo11n baseline)")
     cmap = style.color_map(models)
     g = d.groupby(["dataset", "Model"], sort=False)[metric].agg(["mean", "std"]).reset_index()
     datasets = list(dict.fromkeys(d.dataset))
@@ -48,7 +83,7 @@ def tide_by_model(df: pd.DataFrame, dataset: str):
         return None
     g = d.groupby("Model", sort=False)[cols].mean() * 100
     models = list(g.index)
-    cmap = style.color_map(models)
+    cmap = {m: style.CATEGORICAL[0] for m in models} if _too_many(models) else style.color_map(models)
     fig, axes = plt.subplots(1, len(cols), figsize=(2.1 * len(cols), 0.4 * len(models) + 1.4), sharey=True)
     for ax, c in zip(np.atleast_1d(axes), cols):
         ax.barh(models[::-1], g[c].values[::-1], color=[cmap[m] for m in models[::-1]], height=0.6)
@@ -96,7 +131,8 @@ def cost_vs_accuracy(df: pd.DataFrame, metric: str = "AP_s", cost: str = "GFLOPs
     d = _labelled(df)
     d = d if dataset is None else d[d.dataset == dataset]
     g = d.groupby("Model", sort=False)[[metric, cost]].mean()
-    cmap = style.color_map(list(g.index))
+    cmap = ({m: style.CATEGORICAL[0] for m in g.index} if _too_many(g.index)  # identity via the direct labels
+            else style.color_map(list(g.index)))
     fig, ax = plt.subplots(figsize=(5.5, 3.8))
     for m, r in g.iterrows():
         ax.scatter(r[cost], r[metric] * 100, s=60, color=cmap[m], edgecolor=style.SURFACE, linewidth=2, zorder=3)

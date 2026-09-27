@@ -87,3 +87,16 @@ def test_error_gallery_categories(raw_data, tmp_path):
     counts = gallery(run_dir, d, tmp_path / "gal")
     assert sum(counts.values()) > 0
     assert set(counts) == {"missed", "mislocalised", "misclassified"}
+
+
+def test_many_models_use_ranked_single_hue_chart(tmp_path):
+    rng = np.random.default_rng(1)
+    variants = ["p2p4", "simam", "cbam", "ca", "spd", "nwd", "nwd_assign", "wiou", "inner", "clsw", "focal"]
+    rows = [{"phase": "p2s", "dataset": f"{ds}_bal_v1", "eval_dataset": ds, "model": "yolo11n", "variant": v,
+             "AP_s": 0.2 + rng.uniform(0, 0.1), "GFLOPs": 6 + rng.uniform(0, 3), "TIDE_Miss": 0.1, "TIDE_Loc": 0.05}
+            for ds in ("neu", "gc10") for v in ["base"] + variants]
+    df = pd.DataFrame(rows)
+    save(plots.metric_by_model(df, "AP_s", "P2S: AP_s by model"), tmp_path / "ranked.png")
+    save(plots.tide_by_model(df, "gc10"), tmp_path / "tide.png")
+    save(plots.cost_vs_accuracy(df, dataset="gc10"), tmp_path / "cost.png")
+    assert all((tmp_path / f).stat().st_size > 1000 for f in ("ranked.png", "tide.png", "cost.png"))

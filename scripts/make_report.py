@@ -40,6 +40,20 @@ def main():
             p1 = p1[p1.data_version == main_data_version(p1)]
         ref = p1[with_labels(p1).dataset.isin(set(t.dataset))]
         df = pd.concat([df, ref.assign(phase="p2t")], ignore_index=True)
+    if "p2s" in phases:  # screening has no baseline run of its own: add the phase-1 YOLO11n / -P2 on the same data
+        s = df[df.phase == "p2s"]
+        ref = df[(df.phase == "p1") & (df.model == "yolo11n") & df.variant.isin(["base", "p2"])
+                 & df.dataset.isin(set(s.dataset))]
+        df = pd.concat([df, ref.assign(phase="p2s")], ignore_index=True)
+
+    def fig(make, path):  # a failing figure must never stop the tables
+        try:
+            f = make()
+            if f is not None:
+                save(f, path)
+        except Exception as e:
+            print(f"!! figure {path.name} skipped: {e!r}")
+
     for ph in sorted(p for p in phases if p.startswith("p1") or p in ("p2s", "p2t")):
         d = df[df.phase == ph]
         save_table(table_phase1(df, ph, main_data_only=ph == "p1"), tdir, f"{ph}_results")  # table A
@@ -49,26 +63,25 @@ def main():
                 save_table(pc, tdir / "per_class", f"{ph}_{ds}")
         for metric in ("AP", "AP_s", "AP_rel_small", "R_rel_small"):
             if metric in d:
-                save(plots.metric_by_model(d, metric, f"{ph.upper()}: {metric} by model"), fdir / ph / f"{metric}_by_model.png")
+                fig(lambda: plots.metric_by_model(d, metric, f"{ph.upper()}: {metric} by model"),
+                    fdir / ph / f"{metric}_by_model.png")
         for ds in sorted(set(with_labels(d).dataset)):
-            fig = plots.tide_by_model(d, ds)
-            if fig is not None:
-                save(fig, fdir / ph / f"tide_{ds}.png")
+            fig(lambda: plots.tide_by_model(d, ds), fdir / ph / f"tide_{ds}.png")
             if "GFLOPs" in d:
-                save(plots.cost_vs_accuracy(d, "AP_s", "GFLOPs", ds), fdir / ph / f"cost_{ds}.png")
+                fig(lambda: plots.cost_vs_accuracy(d, "AP_s", "GFLOPs", ds), fdir / ph / f"cost_{ds}.png")
     if "p1" in phases:  # table B: effect of the class-imbalance handling (plan §4.5)
         tb = table_balance(df, "p1")
         if not tb.empty:
             save_table(tb, tdir, "p1_balance_effect")
     if "p2" in phases:
         save_table(table_ablation(df, "p2", a.reference, a.test_metric), tdir, "p2_ablation")
-        save(plots.metric_by_model(df[df.phase == "p2"], a.test_metric, f"Ablation: {a.test_metric}"),
-             fdir / "p2" / f"{a.test_metric}_ablation.png")
+        fig(lambda: plots.metric_by_model(df[df.phase == "p2"], a.test_metric, f"Ablation: {a.test_metric}"),
+            fdir / "p2" / f"{a.test_metric}_ablation.png")
     if "p3" in phases:
         save_table(table_transfer(df), tdir, "p3_transfer")
         for metric in ("AP_s", "AP", "img_detection_rate", "false_alarm_rate"):
             if metric in df:
-                save(plots.transfer_curves(df, metric), fdir / "p3" / f"transfer_{metric}.png")
+                fig(lambda: plots.transfer_curves(df, metric), fdir / "p3" / f"transfer_{metric}.png")
     for run in a.gallery:
         r = df[df.run == run].iloc[0]
         counts = gallery(paths().run_dir(run), ensure_dataset(r.dataset), fdir / "errors" / run)  # builds if missing
