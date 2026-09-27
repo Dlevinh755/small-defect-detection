@@ -53,7 +53,8 @@ def benchmark_module(model: torch.nn.Module, kind: str, imgsz: int = 640, warmup
         m = m.fuse(verbose=False)  # Conv+BN fusion, as in Ultralytics' own inference benchmarks
 
     def make(mod, dtype):
-        x = torch.zeros(1, 3, imgsz, imgsz, device=device, dtype=dtype)
+        # input on the MODEL's device: FLOPs are counted on a CPU copy while latency runs on the GPU
+        x = torch.zeros(1, 3, imgsz, imgsz, device=next(mod.parameters()).device, dtype=dtype)
         if kind == "torchvision":
             return lambda: mod([x[0]])
         return lambda: mod(x)

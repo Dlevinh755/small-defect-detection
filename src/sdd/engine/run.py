@@ -227,7 +227,11 @@ def evaluate_run(spec: RunSpec, weights: Path, data_dir: Path, rd: Path, device:
         from ultralytics import RTDETR, YOLO
 
         module, kind = (RTDETR if family == "rtdetr" else YOLO)(str(weights)).model, "ultralytics"
-    m.update(benchmark_module(module, kind, protocol()["imgsz"], bench["warmup"], bench["iters"], tdev))
+    try:  # efficiency is secondary: never lose an evaluated run over it (it can be re-measured later)
+        m.update(benchmark_module(module, kind, protocol()["imgsz"], bench["warmup"], bench["iters"], tdev))
+    except Exception as e:
+        log.warning("benchmark failed for %s: %s", spec.name, e)
+        m["benchmark_error"] = repr(e)
     return m
 
 

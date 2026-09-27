@@ -60,3 +60,13 @@ def test_spd_shape_and_nwd():
     b = torch.tensor([[0.0, 0.0, 10.0, 10.0]])
     assert torch.isclose(wasserstein_similarity(b, b, 12.8), torch.tensor(1.0), atol=1e-3).all()
     assert wasserstein_similarity(b, b + 4, 12.8) < wasserstein_similarity(b, b + 1, 12.8)
+
+
+def test_benchmark_input_follows_model_device():
+    """Regression: FLOPs were counted with the model on CPU but the input on the benchmark device (crashed on GPU)."""
+    from sdd.evaluation.efficiency import benchmark_module
+
+    m = build_yolo("yolo11n.yaml", nc=2, variant=variant_cfg("base"), verbose=False)
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    out = benchmark_module(m, "ultralytics", imgsz=128, warmup=1, iters=1, device=dev)
+    assert out["GFLOPs"] > 0 and out["params_M"] > 0 and out["fps_fp32"] > 0
