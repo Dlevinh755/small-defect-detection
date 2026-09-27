@@ -60,7 +60,8 @@ def main():
     ap.add_argument("--session-shard", default="0/1", help="i/m: this machine's part when m machines share the grid")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--datasets", nargs="*")
-    ap.add_argument("--logs", default=os.environ.get("SDD_LOGS", "/kaggle/working/logs"))
+    ap.add_argument("--logs", default=os.environ.get("SDD_LOGS"), help="default: <results>/../logs on Kaggle "
+                    "(/kaggle/working/logs), else <results>/logs")
     ap.add_argument("--poll", type=float, default=20.0)
     a = ap.parse_args()
 
@@ -71,7 +72,9 @@ def main():
         return
     n_gpu = gpu_count()
     n = max(n_gpu, 1)
-    logs = Path(a.logs)
+    from sdd.env import is_kaggle, paths
+
+    logs = Path(a.logs) if a.logs else (Path("/kaggle/working/logs") if is_kaggle() else paths().results / "logs")
     logs.mkdir(parents=True, exist_ok=True)
     script = Path(__file__).with_name("run_grid.py")
     si, sm = map(int, a.session_shard.split("/"))

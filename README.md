@@ -93,6 +93,21 @@ python scripts/train.py --dataset neu --model yolo11n --variant p2 --smoke --dev
    unfinished ones resume from `last.pt`. Enable the phase-2/3 flags once the previous phase is done
    (and after editing A2/A3 in `configs/variants.yaml`).
 
+## On a server (no session limit)
+
+```bash
+git clone https://github.com/Dlevinh755/small-defect-detection.git && cd small-defect-detection
+pip install -r requirements.txt && pip install -e . --no-deps
+mkdir -p ~/.kaggle && cp kaggle.json ~/.kaggle/            # for the three Kaggle-hosted datasets
+nohup python scripts/run_all.py > run_all.log 2>&1 &       # data -> P1 -> P2 -> P3 -> report, all GPUs
+tail -f run_all.log                                        # progress; per-GPU logs in results/logs/
+```
+
+`run_all.py` runs the stages in order (`--dry-run` prints them, `--only` / `--from` / `--skip` select, `--smoke`
+checks the pipeline first). If it stops, run the same command again: finished runs are skipped, interrupted ones
+resume from `last.pt`. It does not pause for the phase-2/3 decisions: A2/A3 come from `configs/variants.yaml`
+(default SimAM / NWD), T3 = A7 - edit those first if you decided otherwise.
+
 ## Runs and results
 
 Run name: `<phase>_<dataset>_<model>_<variant>[_<init>_f<pct>_<finetune>][_bg<r>][_itm][_sahi]_s<seed>`, e.g.
